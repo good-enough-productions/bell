@@ -13,7 +13,7 @@ export async function requestNotificationPermission(): Promise<boolean> {
   try {
     const permission = await Notification.requestPermission();
     return permission === 'granted';
-  } catch (error) {
+  } catch {
     throw new NotificationError('Failed to request notification permission');
   }
 }
@@ -27,12 +27,15 @@ export function sendNotification(
   }
 
   try {
-    new Notification(title, {
+    const notification = new Notification(title, {
       icon: '/icon-192x192.png',
       badge: '/icon-192x192.png',
       ...options,
     });
+    console.log('Notification created successfully:', notification);
   } catch (error) {
+    console.error('Error sending notification:', error);
+    console.log('Error details:', error);
     throw new NotificationError('Failed to send notification');
   }
 }
