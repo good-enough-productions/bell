@@ -5,7 +5,7 @@
 (function () {
   'use strict';
 
-  const DEPLOYED_GAS_URL = 'https://script.google.com/macros/s/AKfycbwGn8Sy0PQbqdc06ePY_NG1XdaKkMPkr8yewEzpv-RrZkcoqa3eukXqWsfmXcng64qjdg/exec';
+  const DEPLOYED_GAS_URL = 'https://script.google.com/macros/s/AKfycby2jT5akcUxjE2Gi7PBQXTUF_EiiS51PUVlO9pcArZNht_XS2fbPkcwbG5OrbqGfza9/exec';
 
   // State Management
   const state = {
