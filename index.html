@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Tabby Bell | Partner Urgent Alert</title>
+  <meta name="description" content="Instant urgent bell ring PWA for home partner communication with Android push notifications and history tracking.">
+  <meta name="theme-color" content="#4f46e5">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%236366f1'><path d='M12 2a2 2 0 0 0-2 2v.29C7.12 5.14 5 7.82 5 11v6H3v2h18v-2h-2v-6c0-3.18-2.12-5.86-5-6.71V4a2 2 0 0 0-2-2zm0 20a3 3 0 0 0 3-3h-6a3 3 0 0 0 3 3z'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="bell-icon-badge">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+        </div>
+        <div>
+          <h1>Tabby Bell</h1>
+          <p class="subtitle">Home Partner Call</p>
+        </div>
+      </div>
+      <div class="status-pill" id="connection-status">
+        <span class="status-dot"></span>
+        <span class="status-text">Ready</span>
+      </div>
+    </header>
+
+    <!-- Main Navigation Tabs -->
+    <nav class="nav-tabs">
+      <button class="nav-tab active" data-tab="ring-tab">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+        <span>Ring Bell</span>
+      </button>
+      <button class="nav-tab" data-tab="history-tab">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+        <span>History</span>
+        <span class="badge" id="history-badge" style="display:none;">0</span>
+      </button>
+      <button class="nav-tab" data-tab="settings-tab">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        <span>Settings</span>
+      </button>
+    </nav>
+
+    <!-- Main Content Panels -->
+    <main class="content-area">
+      
+      <!-- TAB 1: Ring Bell View -->
+      <section id="ring-tab" class="tab-panel active">
+        
+        <!-- Active Ring Banner (shown when a bell has been rung & is pending) -->
+        <div id="active-ring-card" class="active-ring-card" style="display: none;">
+          <div class="active-ring-header">
+            <span class="pulse-ring"></span>
+            <span class="active-title">ACTIVE HELP REQUEST</span>
+          </div>
+          <div class="active-ring-body">
+            <h2 id="active-sender">Her</h2>
+            <p id="active-message" class="active-message-text">"Needs help in the room"</p>
+            <p class="active-time" id="active-time">Rung just now</p>
+          </div>
+          <div class="active-ring-actions">
+            <button id="complete-btn" class="btn btn-success btn-lg">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              <span>Mark Completed</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Bell Trigger Container -->
+        <div class="bell-container">
+          <button id="bell-button" class="giant-bell-btn" aria-label="Ring urgent bell">
+            <div class="bell-glow"></div>
+            <div class="bell-inner">
+              <svg class="bell-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+              </svg>
+              <span class="bell-text">RING BELL</span>
+              <span class="bell-subtext">Tap to alert partner</span>
+            </div>
+          </button>
+        </div>
+
+        <!-- Optional Message Selector -->
+        <div class="message-section">
+          <h3>Optional Message</h3>
+          
+          <!-- Preset Chips -->
+          <div class="preset-chips" id="preset-chips">
+            <button class="chip active" data-msg="">None (Just Bell)</button>
+            <button class="chip" data-msg="Can you come here real quick?">Can you come here?</button>
+            <button class="chip" data-msg="Need help in the bedroom!">Help in bedroom</button>
+            <button class="chip" data-msg="Need a hand carrying something!">Heavy lifting</button>
+            <button class="chip" data-msg="Quick question when you have a sec!">Quick question</button>
+          </div>
+
+          <!-- Custom Message Input -->
+          <div class="custom-input-group">
+            <input type="text" id="custom-message-input" placeholder="Or type custom message..." maxlength="120">
+          </div>
+        </div>
+
+      </section>
+
+      <!-- TAB 2: History View -->
+      <section id="history-tab" class="tab-panel">
+        <div class="section-header">
+          <h2>Ring History</h2>
+          <button id="refresh-history-btn" class="btn btn-secondary btn-sm">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+            Refresh
+          </button>
+        </div>
+
+        <div id="history-loading" class="loading-spinner" style="display:none;">
+          <div class="spinner"></div>
+          <p>Fetching history from Google Sheet...</p>
+        </div>
+
+        <div id="history-empty" class="empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          <p>No rings recorded yet.</p>
+          <span class="subtext">When either of you rings the bell, history will appear here.</span>
+        </div>
+
+        <ul id="history-list" class="history-list"></ul>
+      </section>
+
+      <!-- TAB 3: Settings View -->
+      <section id="settings-tab" class="tab-panel">
+        <h2>App Settings</h2>
+
+        <div class="settings-card">
+          <h3>Your Profile / Identity</h3>
+          <p class="card-desc">Choose who is using this device right now.</p>
+          <div class="role-selector">
+            <label class="role-option">
+              <input type="radio" name="user-role" value="Her" checked>
+              <div class="role-card">
+                <span class="role-name">Her / Partner 1</span>
+                <span class="role-sub">Default requester</span>
+              </div>
+            </label>
+            <label class="role-option">
+              <input type="radio" name="user-role" value="Him">
+              <div class="role-card">
+                <span class="role-name">Him / Partner 2</span>
+                <span class="role-sub">Receives alerts</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div class="settings-card">
+          <h3>Android Urgent Push Notifications (`ntfy.sh`)</h3>
+          <p class="card-desc">Set your shared custom secret topic for high-priority Android notifications.</p>
+          <div class="input-field">
+            <label for="ntfy-topic-input">Ntfy Topic Name</label>
+            <input type="text" id="ntfy-topic-input" placeholder="e.g. tabby-bell-home-13579">
+            <span class="field-hint">Install the free <strong>ntfy app</strong> on Android and subscribe to this exact topic to get urgent loud alerts even when phone screen is locked.</span>
+          </div>
+          <button id="test-ntfy-btn" class="btn btn-secondary btn-sm mt-2">
+            Send Test Notification
+          </button>
+        </div>
+
+        <div class="settings-card">
+          <h3>Google Sheet Backend URL</h3>
+          <p class="card-desc">Connect your Google Sheet Apps Script Web App URL.</p>
+          <div class="input-field">
+            <label for="gas-url-input">Apps Script Web App URL</label>
+            <input type="url" id="gas-url-input" placeholder="https://script.google.com/macros/s/.../exec">
+            <span class="field-hint">Deploy Apps Script in your Google Sheet as 'Web app' (Execute as Me, Who has access: Anyone) and paste URL here.</span>
+          </div>
+          <button id="save-settings-btn" class="btn btn-primary">
+            Save Settings
+          </button>
+        </div>
+
+        <div class="settings-card">
+          <h3>Audio & PWA Features</h3>
+          <div class="toggle-row">
+            <div>
+              <span class="toggle-title">Play Sound on Ring</span>
+              <span class="toggle-sub">Plays bell chime sound on device</span>
+            </div>
+            <input type="checkbox" id="sound-toggle" checked>
+          </div>
+          <div class="toggle-row mt-2">
+            <div>
+              <span class="toggle-title">Auto Refresh Status</span>
+              <span class="toggle-sub">Polls sheet every 5s for updates</span>
+            </div>
+            <input type="checkbox" id="poll-toggle" checked>
+          </div>
+        </div>
+
+      </section>
+
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js')
+        .then(reg => console.log('Service Worker registered', reg))
+        .catch(err => console.error('SW registration error', err));
+    }
+  </script>
+</body>
+</html>
