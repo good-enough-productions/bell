@@ -240,7 +240,7 @@
     const newRing = {
       id: 'ring_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
       timestamp: new Date().toISOString(),
-      sender: 'Partner 1',
+      sender: state.role === 'partner1' ? 'Partner 1' : 'Partner 2',
       message: finalMsg,
       status: 'PENDING'
     };
@@ -249,13 +249,14 @@
     renderRingTab();
 
     const appUrl = window.location.href;
-    await sendNtfyPush(state.ntfyTopic, 'Partner 1 needs you!', finalMsg, [
+    const senderName = state.role === 'partner1' ? 'Partner 1' : 'Partner 2';
+    await sendNtfyPush(state.ntfyTopic, senderName + ' needs you!', finalMsg, [
       { action: 'view', label: '📱 Open Bell App', url: appUrl }
     ]);
 
     if (state.gasUrl) {
       try {
-        await gasPost({ action: 'ring', sender: 'Partner 1', message: finalMsg, id: newRing.id, ntfyTopic: state.ntfyTopic, appUrl });
+        await gasPost({ action: 'ring', sender: senderName, message: finalMsg, id: newRing.id, ntfyTopic: state.ntfyTopic, appUrl });
         setTimeout(fetchStatus, 1500);
       } catch(err) {
         console.error('GAS ring error:', err);
