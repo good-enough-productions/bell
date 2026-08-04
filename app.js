@@ -1,16 +1,23 @@
 /**
- * Bell PWA - Main Application Logic (v2 with Service Worker Persistent Notifications & SW Cache Bust)
+ * Bell PWA - Main Application Logic (v3 - ntfy.sh topic matched to bell-home-alert)
  */
 
 (function () {
   'use strict';
 
-  const DEFAULT_NTFY_TOPIC = 'bell-home-alert-13579';
+  const DEFAULT_NTFY_TOPIC = 'bell-home-alert';
+
+  // Migrate old default topic to match user's subscribed topic
+  let storedTopic = localStorage.getItem('bell_ntfyTopic');
+  if (!storedTopic || storedTopic === 'bell-home-alert-13579') {
+    storedTopic = 'bell-home-alert';
+    localStorage.setItem('bell_ntfyTopic', 'bell-home-alert');
+  }
 
   // State Management
   const state = {
     role: localStorage.getItem('bell_role') || 'Her',
-    ntfyTopic: localStorage.getItem('bell_ntfyTopic') || DEFAULT_NTFY_TOPIC,
+    ntfyTopic: storedTopic,
     gasUrl: localStorage.getItem('bell_gasUrl') || '',
     soundEnabled: localStorage.getItem('bell_sound') !== 'false',
     pollEnabled: localStorage.getItem('bell_poll') !== 'false',
@@ -249,7 +256,7 @@
     }
   }
 
-  // Persistent Service Worker Notification for Android PWA
+  // Persistent Service Worker Notification for Android PWA / Desktop
   async function triggerNativeNotification(title, body) {
     try {
       if ('Notification' in window) {
@@ -367,7 +374,7 @@
     sendToGoogleSheet({ action: 'complete', id: ringId });
   }
 
-  // Send Event to Google Apps Script Backend (safely handled)
+  // Send Event to Google Apps Script Backend
   function sendToGoogleSheet(payload) {
     if (!state.gasUrl) return;
     fetch(state.gasUrl, {

@@ -1,6 +1,6 @@
 /* Service Worker for Bell PWA */
 
-const CACHE_NAME = 'bell-v2';
+const CACHE_NAME = 'bell-v3';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
