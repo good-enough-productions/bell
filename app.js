@@ -1,23 +1,26 @@
 /**
  * Bell PWA - Main Application Logic
+ * Real-time sync via ntfy.sh, Web Audio chime, Android lock-screen notifications, and history tracking.
  */
 
 (function () {
   'use strict';
 
-  const DEPLOYED_GAS_URL = 'https://script.google.com/macros/s/AKfycby2jT5akcUxjE2Gi7PBQXTUF_EiiS51PUVlO9pcArZNht_XS2fbPkcwbG5OrbqGfza9/exec';
+  // Default shared topic name for instant real-time sync & notifications
+  const DEFAULT_NTFY_TOPIC = 'bell-home-alert-13579';
 
   // State Management
   const state = {
     role: localStorage.getItem('bell_role') || 'Her',
-    gasUrl: localStorage.getItem('bell_gasUrl') || DEPLOYED_GAS_URL,
-    ntfyTopic: localStorage.getItem('bell_ntfyTopic') || 'bell-home-alert',
+    ntfyTopic: localStorage.getItem('bell_ntfyTopic') || DEFAULT_NTFY_TOPIC,
+    gasUrl: localStorage.getItem('bell_gasUrl') || '',
     soundEnabled: localStorage.getItem('bell_sound') !== 'false',
     pollEnabled: localStorage.getItem('bell_poll') !== 'false',
     selectedPreset: '',
     activeRing: null,
     history: JSON.parse(localStorage.getItem('bell_localHistory') || '[]'),
-    pollTimer: null
+    pollTimer: null,
+    lastPolledMessageId: null
   };
 
   // DOM Elements
@@ -55,16 +58,16 @@
     setupEventListeners();
     loadSavedSettings();
     
-    // Check initial status
+    // Initial fetch & render
     fetchStatus();
 
-    // Start background polling if enabled
+    // Start real-time polling if enabled
     if (state.pollEnabled) {
       startPolling();
     }
   }
 
-  // Tab Switching Logic
+  // Tab Navigation
   function setupTabNavigation() {
     DOM.tabs.forEach(tab => {
       tab.addEventListener('click', () => {
@@ -90,7 +93,7 @@
         DOM.presetChips.forEach(c => c.classList.remove('active'));
         chip.classList.add('active');
         state.selectedPreset = chip.getAttribute('data-msg');
-        DOM.customMsgInput.value = ''; // clear custom if preset tapped
+        DOM.customMsgInput.value = '';
       });
     });
 
@@ -102,7 +105,7 @@
     });
   }
 
-  // Load Saved Settings into UI
+  // Settings Management
   function loadSavedSettings() {
     DOM.gasUrlInput.value = state.gasUrl;
     DOM.ntfyTopicInput.value = state.ntfyTopic;
@@ -118,13 +121,12 @@
     updateConnectionStatusBadge();
   }
 
-  // Save Settings
   function setupSettings() {
     DOM.saveSettingsBtn.addEventListener('click', () => {
       const selectedRole = document.querySelector('input[name="user-role"]:checked')?.value || 'Her';
       state.role = selectedRole;
       state.gasUrl = DOM.gasUrlInput.value.trim();
-      state.ntfyTopic = DOM.ntfyTopicInput.value.trim();
+      state.ntfyTopic = DOM.ntfyTopicInput.value.trim() || DEFAULT_NTFY_TOPIC;
       state.soundEnabled = DOM.soundToggle.checked;
       state.pollEnabled = DOM.pollToggle.checked;
 
@@ -141,7 +143,8 @@
       }
 
       updateConnectionStatusBadge();
-      alert('Settings saved!');
+      fetchStatus();
+      alert('Settings saved successfully!');
     });
 
     DOM.testNtfyBtn.addEventListener('click', () => {
@@ -150,23 +153,22 @@
         alert('Please enter a Ntfy Topic name first.');
         return;
       }
-      sendNtfyPush(topic, state.role, "Test alert from Tabby Bell!");
-      alert('Test notification dispatched to ntfy.sh/' + topic);
+      sendNtfyNotification(topic, state.role, "Test alert from Bell!");
+      alert('Test notification sent to ntfy.sh/' + topic);
     });
   }
 
   function updateConnectionStatusBadge() {
     const statusText = DOM.connStatus.querySelector('.status-text');
-    if (state.gasUrl) {
+    if (state.ntfyTopic) {
       DOM.connStatus.classList.remove('offline');
-      statusText.textContent = 'Connected (Sheet)';
+      statusText.textContent = 'Live (' + state.ntfyTopic + ')';
     } else {
       DOM.connStatus.classList.add('offline');
-      statusText.textContent = 'Local Mode';
+      statusText.textContent = 'Offline';
     }
   }
 
-  // Event Listeners
   function setupEventListeners() {
     DOM.bellBtn.addEventListener('click', ringBell);
     DOM.completeBtn.addEventListener('click', markCompleted);
@@ -181,7 +183,6 @@
       if (!AudioCtx) return;
       const ctx = new AudioCtx();
 
-      // Play 2-tone pleasant bell chime
       const playTone = (freq, time, duration) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
@@ -189,7 +190,7 @@
         osc.frequency.setValueAtTime(freq, time);
 
         gain.gain.setValueAtTime(0, time);
-        gain.gain.linearRampToValueAtTime(0.5, time + 0.05);
+        gain.gain.linearRampToValueAtTime(0.6, time + 0.05);
         gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
 
         osc.connect(gain);
@@ -200,149 +201,202 @@
       };
 
       const now = ctx.currentTime;
-      playTone(837.2, now, 1.2);       // High A5 note
-      playTone(1046.5, now + 0.25, 1.5); // High C6 note
+      playTone(837.2, now, 1.2);         // High A5
+      playTone(1046.5, now + 0.25, 1.5);   // High C6
     } catch (e) {
-      console.warn("Audio Context playback error:", e);
+      console.warn("Audio Context error:", e);
     }
   }
 
-  // Direct Client-Side Ntfy Push Dispatch
-  function sendNtfyPush(topic, sender, message) {
+  // Dispatch Urgent Push Notification via ntfy.sh
+  async function sendNtfyNotification(topic, sender, message, payloadData) {
     if (!topic) return;
-    fetch(`https://ntfy.sh/${encodeURIComponent(topic)}`, {
-      method: 'POST',
-      headers: {
-        'Title': '🔔 Urgent Bell Ring!',
-        'Priority': '5', // Urgent priority
-        'Tags': 'bell,warning,loudspeaker'
-      },
-      body: `${sender}: ${message}`
-    }).catch(err => console.warn('Direct ntfy push error:', err));
+    try {
+      const bodyText = payloadData ? JSON.stringify(payloadData) : `${sender}: ${message}`;
+      await fetch(`https://ntfy.sh/${encodeURIComponent(topic.trim())}`, {
+        method: 'POST',
+        headers: {
+          'Title': '🔔 Urgent Bell Ring!',
+          'Priority': '5', // Urgent high priority alert
+          'Tags': 'bell,warning,loudspeaker'
+        },
+        body: bodyText
+      });
+    } catch (err) {
+      console.warn('Ntfy push error:', err);
+    }
   }
 
   // Action: Ring Bell
   async function ringBell() {
-    // Determine message
     const customMsg = DOM.customMsgInput.value.trim();
     const finalMsg = customMsg || state.selectedPreset || "Needs help in another room!";
 
     playBellChime();
 
-    const newRing = {
-      id: 'ring_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+    const ringId = 'ring_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+    const ringEvent = {
+      type: 'BELL_EVENT',
+      action: 'ring',
+      id: ringId,
       timestamp: new Date().toISOString(),
+      sender: state.role,
+      message: finalMsg
+    };
+
+    // Optimistic UI update
+    state.activeRing = {
+      id: ringId,
+      timestamp: ringEvent.timestamp,
       sender: state.role,
       message: finalMsg,
       status: 'PENDING'
     };
-
-    // Optimistic UI update
-    state.activeRing = newRing;
     renderActiveCard();
-    sendNtfyPush(state.ntfyTopic, state.role, finalMsg);
 
-    // Save to Google Sheet backend if configured
+    // Broadcast to ntfy.sh real-time topic
+    await sendNtfyNotification(state.ntfyTopic, state.role, finalMsg, ringEvent);
+
+    // Send to Google Sheet if configured
     if (state.gasUrl) {
-      try {
-        await fetch(state.gasUrl, {
-          method: 'POST',
-          mode: 'no-cors', // standard for GAS web app cross-origin post
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'ring',
-            sender: state.role,
-            message: finalMsg,
-            ntfyTopic: state.ntfyTopic
-          })
-        });
-        setTimeout(fetchStatus, 1500);
-      } catch (err) {
-        console.error('GAS Ring Post Error:', err);
-      }
-    } else {
-      // Local storage fallback
-      state.history.unshift(newRing);
-      localStorage.setItem('tabby_localHistory', JSON.stringify(state.history));
-      renderHistoryList();
+      sendToGoogleSheet({ action: 'ring', sender: state.role, message: finalMsg });
     }
+
+    // Refresh status
+    setTimeout(fetchStatus, 800);
   }
 
-  // Action: Mark Active Ring Completed
+  // Action: Mark Complete
   async function markCompleted() {
     if (!state.activeRing) return;
 
     const ringId = state.activeRing.id;
-    const now = new Date();
-    const completedAt = now.toISOString();
+    const completeEvent = {
+      type: 'BELL_EVENT',
+      action: 'complete',
+      id: ringId,
+      completedBy: state.role,
+      timestamp: new Date().toISOString()
+    };
 
     state.activeRing = null;
     renderActiveCard();
 
+    // Broadcast completion to ntfy.sh topic
+    await sendNtfyNotification(state.ntfyTopic, state.role, "Help request completed", completeEvent);
+
+    // Send completion to Google Sheet if configured
     if (state.gasUrl) {
-      try {
-        await fetch(state.gasUrl, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'complete',
-            id: ringId
-          })
-        });
-        setTimeout(fetchStatus, 1000);
-      } catch (err) {
-        console.error('GAS Complete Post Error:', err);
-      }
-    } else {
-      // Update local history
-      const localItem = state.history.find(item => item.id === ringId);
-      if (localItem) {
-        localItem.status = 'COMPLETED';
-        localItem.completedAt = completedAt;
-        const start = new Date(localItem.timestamp).getTime();
-        localItem.durationSeconds = Math.round((now.getTime() - start) / 1000);
-      }
-      localStorage.setItem('tabby_localHistory', JSON.stringify(state.history));
-      renderHistoryList();
+      sendToGoogleSheet({ action: 'complete', id: ringId });
     }
+
+    setTimeout(fetchStatus, 800);
   }
 
-  // Fetch Status & History from Google Sheet
+  // Send Event to Google Apps Script Backend (safely handled)
+  function sendToGoogleSheet(payload) {
+    if (!state.gasUrl) return;
+    fetch(state.gasUrl, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).catch(err => console.warn('GAS POST error:', err));
+  }
+
+  // Fetch Real-time Status & History from ntfy.sh Topic Feed
   async function fetchStatus() {
-    if (!state.gasUrl) {
-      renderHistoryList();
+    if (!state.ntfyTopic) {
       renderActiveCard();
+      renderHistoryList();
       return;
     }
 
-    DOM.historyLoading.style.display = 'flex';
-
     try {
-      const res = await fetch(state.gasUrl);
-      const data = await res.json();
+      const res = await fetch(`https://ntfy.sh/${encodeURIComponent(state.ntfyTopic.trim())}/json?poll=1`);
+      const text = await res.text();
+      
+      if (!text) return;
 
-      DOM.historyLoading.style.display = 'none';
+      const lines = text.trim().split('\n');
+      const ringsMap = new Map();
 
-      if (data && !data.error) {
-        state.activeRing = data.active || null;
-        state.history = data.history || [];
+      lines.forEach(line => {
+        try {
+          const entry = JSON.parse(line);
+          if (entry.event !== 'message') return;
 
-        renderActiveCard();
-        renderHistoryList();
+          let data = null;
+          try {
+            data = JSON.parse(entry.message);
+          } catch (e) {
+            // Raw text fallback message
+            data = {
+              type: 'BELL_EVENT',
+              action: 'ring',
+              id: 'ring_' + entry.id,
+              timestamp: new Date(entry.time * 1000).toISOString(),
+              sender: entry.message.split(':')[0] || 'Partner',
+              message: entry.message.split(':')[1] || entry.message
+            };
+          }
+
+          if (!data || data.type !== 'BELL_EVENT') return;
+
+          if (data.action === 'ring') {
+            ringsMap.set(data.id, {
+              id: data.id,
+              timestamp: data.timestamp,
+              sender: data.sender || 'Partner',
+              message: data.message || '',
+              status: 'PENDING',
+              completedAt: null,
+              durationSeconds: null
+            });
+          } else if (data.action === 'complete') {
+            const existing = ringsMap.get(data.id);
+            if (existing) {
+              existing.status = 'COMPLETED';
+              existing.completedAt = data.timestamp;
+              const start = new Date(existing.timestamp).getTime();
+              const end = new Date(data.timestamp).getTime();
+              existing.durationSeconds = Math.max(0, Math.round((end - start) / 1000));
+            }
+          }
+        } catch (err) {
+          // ignore malformed lines
+        }
+      });
+
+      const parsedHistory = Array.from(ringsMap.values()).reverse(); // newest first
+
+      // Check if there is an incoming active ring from partner
+      const active = parsedHistory.find(item => item.status === 'PENDING') || null;
+
+      // Play chime if new ring received from partner!
+      if (active && (!state.activeRing || state.activeRing.id !== active.id)) {
+        if (active.sender !== state.role) {
+          playBellChime();
+        }
       }
+
+      state.activeRing = active;
+      state.history = parsedHistory;
+      localStorage.setItem('bell_localHistory', JSON.stringify(state.history));
+
+      renderActiveCard();
+      renderHistoryList();
     } catch (err) {
-      DOM.historyLoading.style.display = 'none';
-      console.warn('Failed to fetch from Google Sheet backend, displaying local state.', err);
+      console.warn('ntfy fetch error:', err);
       renderActiveCard();
       renderHistoryList();
     }
   }
 
-  // Polling Management
+  // Realtime Polling Loop
   function startPolling() {
     stopPolling();
-    state.pollTimer = setInterval(fetchStatus, 5000);
+    state.pollTimer = setInterval(fetchStatus, 3000); // Check every 3s
   }
 
   function stopPolling() {
@@ -367,7 +421,7 @@
     }
   }
 
-  // Render History View List
+  // Render History Feed List
   function renderHistoryList() {
     DOM.historyList.innerHTML = '';
 
@@ -386,8 +440,8 @@
       const badgeClass = isPending ? 'pending' : 'completed';
       const statusLabel = isPending ? 'Active' : 'Completed';
 
-      const durationText = item.durationSeconds 
-        ? `${Math.floor(item.durationSeconds / 60)}m ${item.durationSeconds % 60}s` 
+      const durationText = item.durationSeconds !== null && item.durationSeconds !== undefined
+        ? (item.durationSeconds < 60 ? `${item.durationSeconds}s` : `${Math.floor(item.durationSeconds / 60)}m ${item.durationSeconds % 60}s`)
         : (isPending ? 'Waiting...' : '');
 
       li.innerHTML = `
@@ -408,7 +462,7 @@
     });
   }
 
-  // Utilities
+  // Format Helpers
   function formatTime(isoStr) {
     if (!isoStr) return '';
     const d = new Date(isoStr);
@@ -431,7 +485,7 @@
     })[match]);
   }
 
-  // Run on DOM Ready
+  // Run initialization
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {
