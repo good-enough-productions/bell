@@ -276,18 +276,24 @@
 
   function updateLocalRing(id, status, responseText) {
     const localHistory = JSON.parse(localStorage.getItem('bell_localHistory') || '[]');
-    const ring = localHistory.find(r => r.id === id);
-    if (ring) {
-      ring.status = status;
-      if (responseText) {
-        ring.response = responseText;
+    let changed = false;
+    localHistory.forEach(ring => {
+      const isComplete = (status === 'COMPLETED' || status === 'cancelled');
+      if (ring.id === id || (isComplete && ring.status === 'PENDING')) {
+        ring.status = status;
+        if (responseText) {
+          ring.response = responseText;
+        }
+        if (status === 'COMPLETED' || status === 'cancelled') {
+          ring.completedAt = new Date().toISOString();
+          const start = new Date(ring.timestamp).getTime();
+          const end = new Date(ring.completedAt).getTime();
+          ring.durationSeconds = Math.max(0, Math.round((end - start) / 1000));
+        }
+        changed = true;
       }
-      if (status === 'COMPLETED' || status === 'cancelled') {
-        ring.completedAt = new Date().toISOString();
-        const start = new Date(ring.timestamp).getTime();
-        const end = new Date(ring.completedAt).getTime();
-        ring.durationSeconds = Math.max(0, Math.round((end - start) / 1000));
-      }
+    });
+    if (changed) {
       localStorage.setItem('bell_localHistory', JSON.stringify(localHistory));
       state.history = localHistory;
       renderHistoryList();
@@ -356,8 +362,32 @@
     const localHistory = JSON.parse(localStorage.getItem('bell_localHistory') || '[]');
 
     if (!state.gasUrl) {
+      let foundPending = false;
+      let changed = false;
+      localHistory.forEach(ring => {
+        if (ring.status === 'PENDING') {
+          if (!foundPending) {
+            foundPending = true;
+          } else {
+            ring.status = 'COMPLETED';
+            ring.completedAt = new Date().toISOString();
+            const start = new Date(ring.timestamp).getTime();
+            const end = new Date(ring.completedAt).getTime();
+            ring.durationSeconds = Math.max(0, Math.round((end - start) / 1000));
+            changed = true;
+          }
+        }
+      });
+      if (changed) {
+        localStorage.setItem('bell_localHistory', JSON.stringify(localHistory));
+      }
+
       state.history = localHistory;
-      state.activeRing = localHistory.find(r => r.status === 'PENDING') || null;
+      let active = localHistory.find(r => r.status === 'PENDING') || null;
+      if (active && active.id === state.dismissedRingId) {
+        active = null;
+      }
+      state.activeRing = active;
       renderRingTab(); renderHistoryList();
       return;
     }
