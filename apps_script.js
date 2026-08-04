@@ -1,32 +1,24 @@
 /**
- * ==============================================================================
  * Bell PWA - Google Apps Script Backend
- * ==============================================================================
- * 
- * SETUP INSTRUCTIONS:
- * 1. Open a new or existing Google Sheet.
- * 2. Click on Extensions > Apps Script.
- * 3. Delete any code in Code.gs and paste this entire file contents into Code.gs.
- * 4. Click 'Save' (Ctrl+S).
- * 5. Click 'Deploy' > 'New deployment'.
- * 6. Select type: 'Web app'.
- * 7. Set 'Execute as': 'Me' (your email).
- * 8. Set 'Who has access': 'Anyone'.
- * 9. Click 'Deploy', authorize permissions if prompted, and COPY the 'Web App URL'.
- * 10. Paste the Web App URL into the Bell PWA Settings tab!
+ *
+ * SETUP:
+ * 1. Open Google Sheet > Extensions > Apps Script
+ * 2. Paste this into Code.gs and save
+ * 3. Deploy > New deployment > Web app
+ *    Execute as: Me | Who has access: Anyone
+ * 4. Copy the Web App URL into Bell Settings > Google Sheet Backend URL
+ * 5. After any code change: Manage deployments > Edit > New Version
  */
 
-const SHEET_NAME = "Bell_History";
+const SHEET_NAME = 'Bell_History';
 
 function getOrCreateSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName(SHEET_NAME);
   if (!sheet) {
     sheet = ss.insertSheet(SHEET_NAME);
-    // Add header row
-    const headers = [["ID", "Timestamp", "Sender", "Message", "Status", "CompletedAt", "DurationSeconds"]];
-    sheet.getRange(1, 1, 1, headers[0].length).setValues(headers);
-    sheet.getRange(1, 1, 1, headers[0].length).setFontWeight("bold").setBackground("#e0e7ff");
+    const h = [['ID','Timestamp','Sender','Message','Status','CompletedAt','DurationSeconds','Response']];
+    sheet.getRange(1,1,1,h[0].length).setValues(h).setFontWeight('bold').setBackground('#e0e7ff');
     sheet.setFrozenRows(1);
   }
   return sheet;
@@ -36,111 +28,88 @@ function doGet(e) {
   try {
     const sheet = getOrCreateSheet();
     const data = sheet.getDataRange().getValues();
-    if (data.length <= 1) {
-      return responseJSON({ active: null, history: [] });
-    }
+    if (data.length <= 1) return responseJSON({ active: null, history: [] });
 
-    const rows = data.slice(1);
-    
-    const history = rows.map(row => ({
-      id: String(row[0]),
-      timestamp: row[1] ? new Date(row[1]).toISOString() : "",
-      sender: String(row[2] || ""),
-      message: String(row[3] || ""),
-      status: String(row[4] || "PENDING"),
-      completedAt: row[5] ? new Date(row[5]).toISOString() : "",
-      durationSeconds: row[6] ? Number(row[6]) : null
+    const history = data.slice(1).map(row => ({
+      id: String(row[0] || ''),
+      timestamp: row[1] ? new Date(row[1]).toISOString() : '',
+      sender: String(row[2] || ''),
+      message: String(row[3] || ''),
+      status: String(row[4] || 'PENDING'),
+      completedAt: row[5] ? new Date(row[5]).toISOString() : '',
+      durationSeconds: row[6] ? Number(row[6]) : null,
+      response: String(row[7] || '')
     }));
 
-    // Find latest PENDING ring if any
-    const active = history.slice().reverse().find(item => item.status === "PENDING") || null;
+    const active = history.slice().reverse().find(
+      r => r.status === 'PENDING' || r.status.startsWith('RESPONDED')
+    ) || null;
 
-    return responseJSON({
-      active: active,
-      history: history.reverse() // Most recent first
-    });
-  } catch (err) {
+    return responseJSON({ active, history: history.reverse() });
+  } catch(err) {
     return responseJSON({ error: err.toString() });
   }
 }
 
 function doPost(e) {
   try {
-    const payload = JSON.parse(e.postData.contents);
+    const p = JSON.parse(e.postData.contents);
     const sheet = getOrCreateSheet();
 
-    if (payload.action === "ring") {
-      const id = "ring_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5);
-      const timestamp = new Date().toISOString();
-      const sender = payload.sender || "Partner";
-      const message = payload.message || "Needs help in another room!";
-      const status = "PENDING";
-      const ntfyTopic = payload.ntfyTopic || "";
-
-      // Append row
-      sheet.appendRow([id, timestamp, sender, message, status, "", ""]);
-
-      // Send ntfy.sh notification if topic configured
-      if (ntfyTopic) {
-        sendNtfyNotification(ntfyTopic, sender, message, id);
+    if (p.action === 'ring') {
+      const id = p.id || ('ring_' + Date.now() + '_' + Math.random().toString(36).substr(2,5));
+      const ts = new Date().toISOString();
+      sheet.appendRow([id, ts, p.sender || 'Partner 1', p.message || '', 'PENDING', '', '', '']);
+      if (p.ntfyTopic) {
+        sendNtfy(p.ntfyTopic, p.sender || 'Partner 1', p.message || '',
+          p.appUrl || 'https://good-enough-productions.github.io/bell/');
       }
-
-      return responseJSON({
-        success: true,
-        ring: { id, timestamp, sender, message, status }
-      });
-    } 
-    
-    if (payload.action === "complete") {
-      const id = payload.id;
-      const data = sheet.getDataRange().getValues();
-      let found = false;
-
-      for (let i = 1; i < data.length; i++) {
-        if (String(data[i][0]) === String(id)) {
-          const startTime = new Date(data[i][1]).getTime();
-          const now = new Date();
-          const completedAt = now.toISOString();
-          const durationSeconds = Math.round((now.getTime() - startTime) / 1000);
-
-          // Update Status (Col 5 = E), CompletedAt (Col 6 = F), Duration (Col 7 = G)
-          sheet.getRange(i + 1, 5).setValue("COMPLETED");
-          sheet.getRange(i + 1, 6).setValue(completedAt);
-          sheet.getRange(i + 1, 7).setValue(durationSeconds);
-          found = true;
-          break;
-        }
-      }
-
-      return responseJSON({ success: found });
+      return responseJSON({ success: true, id });
     }
 
-    return responseJSON({ error: "Unknown action" });
-  } catch (err) {
+    if (p.action === 'complete') {
+      const data = sheet.getDataRange().getValues();
+      for (let i = 1; i < data.length; i++) {
+        if (String(data[i][0]) === String(p.id)) {
+          const now = new Date();
+          const dur = Math.round((now - new Date(data[i][1])) / 1000);
+          const resp = p.response || 'Done';
+          const isDone = resp === 'Done' || resp === 'cancelled';
+          const status = isDone ? 'COMPLETED' : ('RESPONDED: ' + resp);
+          sheet.getRange(i+1,5).setValue(status);
+          sheet.getRange(i+1,8).setValue(resp);
+          if (isDone) {
+            sheet.getRange(i+1,6).setValue(now.toISOString());
+            sheet.getRange(i+1,7).setValue(dur);
+          }
+          return responseJSON({ success: true });
+        }
+      }
+      return responseJSON({ success: false });
+    }
+
+    return responseJSON({ error: 'Unknown action' });
+  } catch(err) {
     return responseJSON({ error: err.toString() });
   }
 }
 
-function sendNtfyNotification(topic, sender, message, ringId) {
+function sendNtfy(topic, sender, message, appUrl) {
   try {
-    const url = "https://ntfy.sh/" + topic.trim();
-    const payload = {
-      topic: topic.trim(),
-      title: "🔔 Urgent Bell Ring!",
-      message: sender + ": " + message,
-      priority: 5, // Urgent priority in ntfy
-      tags: ["bell", "warning", "loudspeaker"]
-    };
-
-    UrlFetchApp.fetch(url, {
-      method: "post",
-      contentType: "application/json",
-      payload: JSON.stringify(payload),
+    UrlFetchApp.fetch('https://ntfy.sh', {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({
+        topic: topic.trim(),
+        title: '🔔 ' + sender + ' needs you!',
+        message: message || 'Bell rung — come find them!',
+        priority: 5,
+        tags: ['bell','loudspeaker'],
+        actions: [{ action: 'view', label: 'Open Bell App', url: appUrl }]
+      }),
       muteHttpExceptions: true
     });
-  } catch (e) {
-    Logger.log("Ntfy dispatch error: " + e.toString());
-  }
+  } catch(e) { Logger.log('ntfy error: ' + e); }
 }
 
 function responseJSON(obj) {

@@ -1,17 +1,18 @@
 {
-  "name": "Bell - Urgent Partner Call",
+  "name": "Bell — Partner Alert",
   "short_name": "Bell",
-  "description": "Instant urgent bell ring PWA for home partner communication with Android push notifications and history tracking.",
+  "description": "Instant bell ring PWA for home partner communication with push notifications and history.",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#0f172a",
   "theme_color": "#4f46e5",
-  "orientation": "portrait",
+  "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='128' fill='%234f46e5'/><path fill='white' d='M256 64a32 32 0 0 0-32 32v4.64C147.2 110.88 96 166.4 96 234.67V352H64v32h384v-32h-32V234.67c0-68.27-51.2-123.79-128-134.03V96a32 32 0 0 0-32-32zm0 384a48 48 0 0 0 48-48h-96a48 48 0 0 0 48 48z'/></svg>",
-      "sizes": "192x192 512x512",
-      "type": "image/svg+xml"
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%234f46e5'/><path d='M50 15a5 5 0 0 0-5 5v1a20 20 0 0 0-15 19v18H20v6h60v-6H68V40A20 20 0 0 0 55 21v-1a5 5 0 0 0-5-5zm0 58a8 8 0 0 0 8-8H42a8 8 0 0 0 8 8z' fill='white'/></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
     }
   ]
 }
