@@ -216,6 +216,28 @@
         </div>
         <button id="save-settings-btn" class="btn btn-primary btn-full">Save Settings</button>
 
+
+        <div class="settings-card">
+          <h3>📘 Quick User Guide</h3>
+          <p class="card-desc">How to configure and use Bell in 3 simple steps:</p>
+          <div class="guide-steps" style="font-size: 0.85rem; line-height: 1.5; color: var(--text-secondary); margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
+            <p><strong>1. Assign Roles:</strong> Set one device to <strong>Partner 1</strong> (e.g. desktop) and the other to <strong>Partner 2</strong> (e.g. phone) in settings.</p>
+            <p><strong>2. Configure ntfy:</strong> Type the same secret topic name (e.g. <code>bell-home-alert</code>) on both devices. Install the free <em>ntfy</em> app on Partner 2's Android phone and subscribe to that same topic to receive loud lock-screen alerts.</p>
+            <p><strong>3. Sync via Google Sheet (Optional):</strong> Paste your Google Apps Script Web App URL on both devices to keep a shared history of bell rings and response times.</p>
+          </div>
+        </div>
+
+        <div class="settings-card">
+          <h3>💬 Submit Feedback</h3>
+          <p class="card-desc">Help us improve the app! Submit feedback directly to your database logs.</p>
+          <div class="input-field mt-2">
+            <textarea id="feedback-input" placeholder="Type your feedback here..." rows="3" style="width: 100%; border: 1px solid var(--border-color); border-radius: 8px; padding: 10px; background-color: var(--bg-secondary); color: var(--text-primary); font-family: inherit; resize: vertical; box-sizing: border-box;"></textarea>
+          </div>
+          <button id="submit-feedback-btn" class="btn btn-secondary btn-full btn-sm" style="margin-top: 10px;">
+            Submit Feedback
+          </button>
+        </div>
+
         <div class="settings-card" style="border-color: var(--danger-primary); margin-top: 24px;">
           <h3 style="color: var(--danger-primary);">⚠️ Reset &amp; Troubleshooting</h3>
           <p class="card-desc">If the app is stuck displaying old alerts or looping, use the button below to clear all cached files, clear local storage, and download the latest update.</p>

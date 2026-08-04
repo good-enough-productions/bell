@@ -84,10 +84,28 @@ function doPost(e) {
       return responseJSON({ success: false });
     }
 
+    if (p.action === 'feedback') {
+      const fbSheet = getOrCreateFeedbackSheet();
+      fbSheet.appendRow([new Date().toISOString(), p.sender || 'Unknown', p.message || '']);
+      return responseJSON({ success: true });
+    }
+
     return responseJSON({ error: 'Unknown action' });
   } catch(err) {
     return responseJSON({ error: err.toString() });
   }
+}
+
+function getOrCreateFeedbackSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName('Feedback');
+  if (!sheet) {
+    sheet = ss.insertSheet('Feedback');
+    const headers = [['Timestamp', 'User', 'FeedbackMessage']];
+    sheet.getRange(1, 1, 1, headers[0].length).setValues(headers).setFontWeight('bold').setBackground('#fed7aa');
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
 }
 
 function responseJSON(obj) {

@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bell — Project Documentation &amp; Guides</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #0b0f19;
+      --bg-secondary: #111827;
+      --bg-tertiary: #1f2937;
+      --text-primary: #f3f4f6;
+      --text-secondary: #9ca3af;
+      --accent-primary: #6366f1;
+      --accent-hover: #4f46e5;
+      --border-color: #374151;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+      line-height: 1.6;
+      padding: 2rem 1rem;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 3rem;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 2rem;
+    }
+
+    .logo-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 70px;
+      height: 70px;
+      background-color: var(--accent-primary);
+      border-radius: 20px;
+      margin-bottom: 1rem;
+      box-shadow: 0 10px 25px rgba(99, 102, 241, 0.3);
+    }
+
+    .logo-badge svg {
+      width: 35px;
+      height: 35px;
+      color: white;
+    }
+
+    h1 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 2.5rem;
+      font-weight: 800;
+      letter-spacing: -0.025em;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, #fff 0%, #a5b4fc 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .subtitle {
+      color: var(--text-secondary);
+      font-size: 1.1rem;
+    }
+
+    nav {
+      background-color: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 0.5rem;
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 3rem;
+      overflow-x: auto;
+    }
+
+    nav a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      padding: 0.6rem 1.2rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      white-space: nowrap;
+      transition: all 0.2s ease;
+    }
+
+    nav a:hover, nav a.active {
+      color: white;
+      background-color: var(--bg-tertiary);
+    }
+
+    nav a.active {
+      background-color: var(--accent-primary);
+    }
+
+    section {
+      background-color: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 2.5rem;
+      margin-bottom: 2.5rem;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    }
+
+    h2 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.75rem;
+      font-weight: 700;
+      margin-bottom: 1.5rem;
+      border-left: 4px solid var(--accent-primary);
+      padding-left: 0.75rem;
+    }
+
+    h3 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin: 1.5rem 0 0.75rem;
+      color: white;
+    }
+
+    p {
+      color: var(--text-secondary);
+      margin-bottom: 1rem;
+    }
+
+    ul, ol {
+      margin-bottom: 1rem;
+      padding-left: 1.5rem;
+      color: var(--text-secondary);
+    }
+
+    li {
+      margin-bottom: 0.5rem;
+    }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.9rem;
+      background-color: var(--bg-tertiary);
+      color: #cbd5e1;
+      padding: 0.2rem 0.4rem;
+      border-radius: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    pre {
+      background-color: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 1.25rem;
+      overflow-x: auto;
+      margin: 1rem 0;
+    }
+
+    pre code {
+      background-color: transparent;
+      border: none;
+      padding: 0;
+      color: #93c5fd;
+    }
+
+    .alert {
+      padding: 1rem 1.25rem;
+      border-radius: 12px;
+      border-left: 4px solid;
+      margin: 1.5rem 0;
+      background-color: rgba(255, 255, 255, 0.02);
+    }
+
+    .alert.info { border-color: var(--accent-primary); color: #a5b4fc; }
+    .alert.warning { border-color: var(--warning); color: #fde047; }
+    .alert.success { border-color: var(--success); color: #6ee7b7; }
+    .alert.danger { border-color: var(--danger); color: #fca5a5; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin: 1.5rem 0;
+    }
+
+    .card {
+      background-color: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 1.5rem;
+    }
+
+    .card h4 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      color: white;
+    }
+
+    @media (max-width: 768px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+      section {
+        padding: 1.5rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo-badge">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+      </div>
+      <h1>Bell</h1>
+      <p class="subtitle">Progressive Web App for Urgent Partner Assistance</p>
+    </header>
+
+    <nav>
+      <a href="#intentions" class="active">Intentions &amp; Goals</a>
+      <a href="#user-guide">User Guide</a>
+      <a href="#developer-guide">Developer Guide</a>
+      <a href="#roadmap">Roadmap</a>
+      <a href="#lessons-learned">Lessons Learned</a>
+      <a href="#backlog">Backlog &amp; Bugs</a>
+    </nav>
+
+    <!-- INTENTIONS -->
+    <section id="intentions">
+      <h2>MVP Goals &amp; Intentions</h2>
+      <p>Bell is a Progressive Web App (PWA) designed to provide instant, high-priority home communication between partners in separate rooms. It solves the issue of missing standard messages (like SMS or WhatsApp) when one partner needs urgent physical help or quick attention.</p>
+      
+      <h3>Core MVP Features</h3>
+      <ul>
+        <li><strong>Role Isolation:</strong> Devices configured as <strong>Partner 1 (Ringer)</strong> see the primary bell interface to call for help. Devices set as <strong>Partner 2 (Receiver)</strong> see incoming alerts and response controls.</li>
+        <li><strong>Urgent Push Alerts:</strong> Integrated with <code>ntfy.sh</code> (Priority 5, urgent tags) to trigger loud notification alarms on Android, even if the screen is locked.</li>
+        <li><strong>Interactive Responses:</strong> Receiver can respond with quick choices (<em>"On My Way!"</em>, <em>"Give Me 5 Min"</em>, or custom text) that instantly update the Ringer's screen.</li>
+        <li><strong>Serverless Database (Optional):</strong> A Google Apps Script backend bound to a Google Sheet automatically logs all events, durations, and replies, providing shared history.</li>
+        <li><strong>Offline-First / PWA:</strong> Fully installable standalone app, utilizing a service worker to cache assets and load immediately in offline conditions.</li>
+      </ul>
+    </section>
+
+    <!-- USER GUIDE -->
+    <section id="user-guide">
+      <h2>User Guide</h2>
+      <p>Follow these steps to set up and use Bell with your partner:</p>
+
+      <h3>Step 1: Open and Install the App</h3>
+      <p>Open the live PWA link: <code>https://good-enough-productions.github.io/bell/</code> on both devices. In Chrome, click the <strong>Install</strong> icon in the address bar to run it as a standalone app on your home screen or desktop.</p>
+
+      <h3>Step 2: Assign Roles</h3>
+      <p>Go to the <strong>Settings</strong> tab:</p>
+      <ul>
+        <li><strong>Device A (e.g. Desktop):</strong> Select <strong>Partner 1</strong> (Ringer) and click <em>Save Settings</em>.</li>
+        <li><strong>Device B (e.g. Phone):</strong> Select <strong>Partner 2</strong> (Receiver) and click <em>Save Settings</em>.</li>
+      </ul>
+
+      <h3>Step 3: Setup Phone Alerts (ntfy)</h3>
+      <ol>
+        <li>On your phone, install the free <strong>ntfy</strong> app from the Google Play Store.</li>
+        <li>Open the ntfy app, tap <strong>+ (Subscribe)</strong>, and enter a shared secret topic name (e.g. <code>bell-home-alert-13579</code>).</li>
+        <li>In the Bell PWA Settings tab, type this exact same topic name under <strong>ntfy Topic Name</strong>.</li>
+        <li>Click <strong>Send Test Notification</strong> to verify your phone rings!</li>
+      </ol>
+
+      <div class="alert info">
+        <strong>Note for Android:</strong> Ensure the ntfy app has battery optimizations disabled and permission to send notifications to ensure alerts arrive instantly.
+      </div>
+    </section>
+
+    <!-- DEVELOPER GUIDE -->
+    <section id="developer-guide">
+      <h2>Developer Guide</h2>
+      <p>Instructions for developing, updating, and deploying the Bell codebase.</p>
+
+      <h3>Repository Structure</h3>
+      <ul>
+        <li><code>index.html</code>: Responsive UI layout styled with Vanilla CSS.</li>
+        <li><code>app.js</code>: Main application logic, handling PWA tabs, state syncing, ntfy calls, and local storage fallback.</li>
+        <li><code>sw.js</code>: Service worker code that handles asset caching and push notifications.</li>
+        <li><code>gas_sheet_project/</code>: Google Apps Script folder managed by <code>clasp</code>. Contains:
+          <ul>
+            <li><code>Code.js</code>: Backend API code handling spreadsheets logging and feedback.</li>
+            <li><code>appsscript.json</code>: Apps script manifest config.</li>
+          </ul>
+        </li>
+      </ul>
+
+      <h3>Local Development &amp; Clasp Setup</h3>
+      <p>The Apps Script is linked directly to your Google Sheet using Google clasp:</p>
+      <pre><code># Install dependencies
+npm install -g @google/clasp
+
+# Login to Google clasp
+clasp login
+
+# Push modifications to sheet Apps Script
+npx clasp push -f
+
+# Redeploy Web App (keeps the same URL)
+npx clasp deploy -i &lt;DEPLOYMENT_ID&gt; -d "Update description"</code></pre>
+
+      <div class="alert warning">
+        <strong>Crucial Deployment Scope:</strong> Keep the Apps Script scopes limited. Do not introduce <code>UrlFetchApp</code> calls to prevent triggering Google's security blocks, which require manual re-authorization from the user.
+      </div>
+    </section>
+
+    <!-- ROADMAP -->
+    <section id="roadmap">
+      <h2>Technical Roadmap</h2>
+      <div class="grid">
+        <div class="card">
+          <h4>Phase 1: Stabilization (Completed)</h4>
+          <p>Role-based screens, direct JSON client-side ntfy triggers, and database-less localStorage fallback features are completely stable.</p>
+        </div>
+        <div class="card">
+          <h4>Phase 2: Feedback &amp; Help (Completed)</h4>
+          <p>Expose a built-in user guide and feedback submission form in Settings, automatically logged to the spreadsheet database.</p>
+        </div>
+        <div class="card">
+          <h4>Phase 3: iOS Web Push Support</h4>
+          <p>Add standards-based Web Push protocol features using VAPID keys to support native lock-screen alerts on iOS 16.4+ without relying on the ntfy app.</p>
+        </div>
+        <div class="card">
+          <h4>Phase 4: Custom Audio Upload</h4>
+          <p>Allow users to upload or choose custom MP3 chime sounds to play on their device when a bell is rung.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- LESSONS LEARNED -->
+    <section id="lessons-learned">
+      <h2>Lessons Learned</h2>
+      
+      <h3>1. Progressive Web App Caching Lifecycles</h3>
+      <p>PWAs cache files very aggressively. A normal page refresh (F5) will still serve the older JS file from the service worker cache. To bypass this, we implemented an <strong>aggressive auto-updater</strong> inside <code>index.html</code> that listens for new service worker installations and immediately reloads the page to activate the update.</p>
+
+      <h3>2. Web App CORS Limitations</h3>
+      <p>Google Apps Script Web Apps do not support CORS headers for <code>POST</code> requests from external domains. We utilize <code>mode: 'no-cors'</code> for database updates, which returns an opaque response, and synchronize the client-side state using an asynchronous <code>GET</code> poll (which supports redirects).</p>
+
+      <h3>3. Stale State Race Conditions</h3>
+      <p>Because writing rows to Google Sheets takes a few seconds, a status poll fired right after a cancellation or response could fetch the old <code>PENDING</code> state and revert the UI. We resolved this by implementing an <strong>optimistic UI lock</strong> (dismissed ring ID tracker) to block old statuses from rendering.</p>
+    </section>
+
+    <!-- BACKLOG & BUGS -->
+    <section id="backlog">
+      <h2>Backlog &amp; Bugs</h2>
+      <div class="alert success">
+        <strong>No Active Bugs:</strong> All critical loops, role identity mismatches, and local storage queue bugs have been fully resolved.
+      </div>
+      
+      <h3>Backlog / Planned Tasks</h3>
+      <ul>
+        <li><strong>Multicast Rooms:</strong> Expand database columns and topics to allow group/family alert channels (more than 2 partners).</li>
+        <li><strong>Chime Sound Settings:</strong> Let users adjust notification volume or select from pre-recorded bell ring types directly in Settings.</li>
+        <li><strong>Status Polling Inactivity Sleep:</strong> Pause status polling loop after 1 hour of browser inactivity to conserve device battery and avoid hitting Google API limits.</li>
+      </ul>
+    </section>
+  </div>
+
+  <script>
+    // Navigation highlighting
+    const links = document.querySelectorAll('nav a');
+    window.addEventListener('scroll', () => {
+      let fromTop = window.scrollY + 100;
+      links.forEach(link => {
+        let section = document.querySelector(link.hash);
+        if (
+          section.offsetTop <= fromTop &&
+          section.offsetTop + section.offsetHeight > fromTop
+        ) {
+          links.forEach(l => l.classList.remove('active'));
+          link.classList.add('active');
+        }
+      });
+    });
+  </script>
+</body>
+</html>

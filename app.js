@@ -65,7 +65,9 @@
     testNtfyBtn: $('test-ntfy-btn'),
     soundToggle: $('sound-toggle'),
     pollToggle: $('poll-toggle'),
-    resetAppBtn: $('reset-app-btn')
+    resetAppBtn: $('reset-app-btn'),
+    feedbackInput: $('feedback-input'),
+    submitFeedbackBtn: $('submit-feedback-btn')
   };
 
   function init() {
@@ -208,6 +210,42 @@
         window.location.reload(true);
       }
     });
+    DOM.submitFeedbackBtn.addEventListener('click', submitFeedback);
+  }
+
+  async function submitFeedback() {
+    const text = DOM.feedbackInput.value.trim();
+    if (!text) { alert('Please enter some feedback first.'); return; }
+    
+    DOM.submitFeedbackBtn.disabled = true;
+    DOM.submitFeedbackBtn.textContent = 'Submitting...';
+    
+    const localFeedback = JSON.parse(localStorage.getItem('bell_feedback') || '[]');
+    localFeedback.push({
+      timestamp: new Date().toISOString(),
+      sender: state.role === 'partner1' ? 'Partner 1' : 'Partner 2',
+      message: text
+    });
+    localStorage.setItem('bell_feedback', JSON.stringify(localFeedback));
+    
+    if (state.gasUrl) {
+      try {
+        await gasPost({
+          action: 'feedback',
+          sender: state.role === 'partner1' ? 'Partner 1' : 'Partner 2',
+          message: text
+        });
+      } catch (err) {
+        console.error('GAS feedback error:', err);
+      }
+    }
+    
+    DOM.feedbackInput.value = '';
+    DOM.submitFeedbackBtn.disabled = false;
+    DOM.submitFeedbackBtn.textContent = '✓ Submitted!';
+    setTimeout(() => {
+      DOM.submitFeedbackBtn.textContent = 'Submit Feedback';
+    }, 2000);
   }
 
   function playBellChime() {
