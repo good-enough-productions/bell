@@ -20,6 +20,7 @@
     pollEnabled: localStorage.getItem('bell_poll') !== 'false',
     selectedPreset: '',
     activeRing: null,
+    dismissedRingId: null,
     history: [],
     pollTimer: null,
     lastSeenRingId: localStorage.getItem('bell_lastSeenRingId') || null
@@ -276,6 +277,7 @@
   async function cancelRing() {
     if (!state.activeRing) return;
     const id = state.activeRing.id;
+    state.dismissedRingId = id;
     state.activeRing = null;
     renderRingTab();
     if (state.gasUrl) {
@@ -305,6 +307,7 @@
     }
 
     if (isComplete || responseType === 'on_my_way') {
+      state.dismissedRingId = id;
       state.activeRing = null;
     } else if (state.activeRing) {
       state.activeRing.status = status;
@@ -345,8 +348,15 @@
       DOM.historyLoading.style.display = 'none';
 
       if (data && !data.error) {
+        let active = data.active || null;
+        if (active && active.id === state.dismissedRingId) {
+          active = null;
+        } else if (!active || active.id !== state.dismissedRingId) {
+          state.dismissedRingId = null;
+        }
+
         const prevActive = state.activeRing;
-        state.activeRing = data.active || null;
+        state.activeRing = active;
         state.history = data.history || [];
 
         // Partner 2: chime on new ring
@@ -363,7 +373,11 @@
       DOM.historyLoading.style.display = 'none';
       console.warn('fetchStatus error:', err.message);
       state.history = localHistory;
-      state.activeRing = localHistory.find(r => r.status === 'PENDING') || null;
+      let active = localHistory.find(r => r.status === 'PENDING') || null;
+      if (active && active.id === state.dismissedRingId) {
+        active = null;
+      }
+      state.activeRing = active;
       renderRingTab(); renderHistoryList();
     }
   }
