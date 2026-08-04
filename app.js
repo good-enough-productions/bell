@@ -1,20 +1,22 @@
 /**
- * Tabby Bell PWA - Main Application Logic
+ * Bell PWA - Main Application Logic
  */
 
 (function () {
   'use strict';
 
+  const DEPLOYED_GAS_URL = 'https://script.google.com/macros/s/AKfycbwGn8Sy0PQbqdc06ePY_NG1XdaKkMPkr8yewEzpv-RrZkcoqa3eukXqWsfmXcng64qjdg/exec';
+
   // State Management
   const state = {
-    role: localStorage.getItem('tabby_role') || 'Her',
-    gasUrl: localStorage.getItem('tabby_gasUrl') || '',
-    ntfyTopic: localStorage.getItem('tabby_ntfyTopic') || 'tabby-bell-home-alert',
-    soundEnabled: localStorage.getItem('tabby_sound') !== 'false',
-    pollEnabled: localStorage.getItem('tabby_poll') !== 'false',
+    role: localStorage.getItem('bell_role') || 'Her',
+    gasUrl: localStorage.getItem('bell_gasUrl') || DEPLOYED_GAS_URL,
+    ntfyTopic: localStorage.getItem('bell_ntfyTopic') || 'bell-home-alert',
+    soundEnabled: localStorage.getItem('bell_sound') !== 'false',
+    pollEnabled: localStorage.getItem('bell_poll') !== 'false',
     selectedPreset: '',
     activeRing: null,
-    history: JSON.parse(localStorage.getItem('tabby_localHistory') || '[]'),
+    history: JSON.parse(localStorage.getItem('bell_localHistory') || '[]'),
     pollTimer: null
   };
 
@@ -126,11 +128,11 @@
       state.soundEnabled = DOM.soundToggle.checked;
       state.pollEnabled = DOM.pollToggle.checked;
 
-      localStorage.setItem('tabby_role', state.role);
-      localStorage.setItem('tabby_gasUrl', state.gasUrl);
-      localStorage.setItem('tabby_ntfyTopic', state.ntfyTopic);
-      localStorage.setItem('tabby_sound', state.soundEnabled);
-      localStorage.setItem('tabby_poll', state.pollEnabled);
+      localStorage.setItem('bell_role', state.role);
+      localStorage.setItem('bell_gasUrl', state.gasUrl);
+      localStorage.setItem('bell_ntfyTopic', state.ntfyTopic);
+      localStorage.setItem('bell_sound', state.soundEnabled);
+      localStorage.setItem('bell_poll', state.pollEnabled);
 
       if (state.pollEnabled) {
         startPolling();

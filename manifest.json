@@ -1,6 +1,6 @@
 {
-  "name": "Tabby Bell - Urgent Partner Call",
-  "short_name": "Tabby Bell",
+  "name": "Bell - Urgent Partner Call",
+  "short_name": "Bell",
   "description": "Instant urgent bell ring PWA for home partner communication with Android push notifications and history tracking.",
   "start_url": "./index.html",
   "display": "standalone",

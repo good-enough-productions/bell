@@ -1,29 +1,49 @@
 /**
  * ==============================================================================
- * Bell PWA - Google Apps Script Backend
+ * Bell PWA - Google Apps Script Backend (Auto-Creating Database)
  * ==============================================================================
- * 
- * SETUP INSTRUCTIONS:
- * 1. Open a new or existing Google Sheet.
- * 2. Click on Extensions > Apps Script.
- * 3. Delete any code in Code.gs and paste this entire file contents into Code.gs.
- * 4. Click 'Save' (Ctrl+S).
- * 5. Click 'Deploy' > 'New deployment'.
- * 6. Select type: 'Web app'.
- * 7. Set 'Execute as': 'Me' (your email).
- * 8. Set 'Who has access': 'Anyone'.
- * 9. Click 'Deploy', authorize permissions if prompted, and COPY the 'Web App URL'.
- * 10. Paste the Web App URL into the Bell PWA Settings tab!
  */
 
 const SHEET_NAME = "Bell_History";
 
 function getOrCreateSheet() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const userProperties = PropertiesService.getUserProperties();
+  let spreadsheetId = userProperties.getProperty("SPREADSHEET_ID");
+  let ss = null;
+
+  if (spreadsheetId) {
+    try {
+      ss = SpreadsheetApp.openById(spreadsheetId);
+    } catch (e) {
+      ss = null;
+    }
+  }
+
+  if (!ss) {
+    try {
+      ss = SpreadsheetApp.getActiveSpreadsheet();
+    } catch (e) {
+      ss = null;
+    }
+  }
+
+  if (!ss) {
+    // Search Drive for existing "Bell_Database" spreadsheet
+    const files = DriveApp.getFilesByName("Bell_Database");
+    if (files.hasNext()) {
+      const file = files.next();
+      ss = SpreadsheetApp.openById(file.getId());
+      userProperties.setProperty("SPREADSHEET_ID", file.getId());
+    } else {
+      // Create new Google Sheet automatically!
+      ss = SpreadsheetApp.create("Bell_Database");
+      userProperties.setProperty("SPREADSHEET_ID", ss.getId());
+    }
+  }
+
   let sheet = ss.getSheetByName(SHEET_NAME);
   if (!sheet) {
     sheet = ss.insertSheet(SHEET_NAME);
-    // Add header row
     const headers = [["ID", "Timestamp", "Sender", "Message", "Status", "CompletedAt", "DurationSeconds"]];
     sheet.getRange(1, 1, 1, headers[0].length).setValues(headers);
     sheet.getRange(1, 1, 1, headers[0].length).setFontWeight("bold").setBackground("#e0e7ff");
