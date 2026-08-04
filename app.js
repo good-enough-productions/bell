@@ -1,6 +1,5 @@
 /**
- * Bell PWA - Main Application Logic
- * Real-time sync via ntfy.sh, Web Audio chime, Android lock-screen notifications, and history tracking.
+ * Bell PWA - Main Application Logic (v2 with Service Worker Persistent Notifications & SW Cache Bust)
  */
 
 (function () {
@@ -50,12 +49,10 @@
     connStatus: document.getElementById('connection-status')
   };
 
-  // Save history to localStorage
   function saveHistory() {
     localStorage.setItem('bell_localHistory', JSON.stringify(state.history));
   }
 
-  // Initialization
   function init() {
     setupTabNavigation();
     setupPresetChips();
@@ -63,7 +60,7 @@
     setupEventListeners();
     loadSavedSettings();
 
-    // Find active ring from history if any
+    // Check active ring from stored history
     const pendingRing = state.history.find(item => item.status === 'PENDING');
     if (pendingRing) {
       state.activeRing = pendingRing;
@@ -72,7 +69,7 @@
     renderActiveCard();
     renderHistoryList();
 
-    // Realtime sync from ntfy topic feed
+    // Fetch real-time status feed
     fetchStatus();
 
     // Start background sync polling if enabled
@@ -81,7 +78,6 @@
     }
   }
 
-  // Tab Navigation
   function setupTabNavigation() {
     DOM.tabs.forEach(tab => {
       tab.addEventListener('click', () => {
@@ -101,7 +97,6 @@
     });
   }
 
-  // Preset Chips Selection
   function setupPresetChips() {
     DOM.presetChips.forEach(chip => {
       chip.addEventListener('click', () => {
@@ -120,7 +115,6 @@
     });
   }
 
-  // Settings Management
   function loadSavedSettings() {
     DOM.gasUrlInput.value = state.gasUrl;
     DOM.ntfyTopicInput.value = state.ntfyTopic;
@@ -162,28 +156,31 @@
       alert('Settings saved successfully!');
     });
 
-    DOM.testNtfyBtn.addEventListener('click', () => {
+    DOM.testNtfyBtn.addEventListener('click', async () => {
       const topic = DOM.ntfyTopicInput.value.trim() || state.ntfyTopic;
       if (!topic) {
         alert('Please enter a Ntfy Topic name first.');
         return;
       }
-      triggerNativeNotification('🔔 Bell Test Alert', `${state.role}: Testing notifications!`);
-      sendNtfyNotification(topic, state.role, "Testing notification!");
+      await triggerNativeNotification('🔔 Bell Test Alert', `${state.role}: Testing notifications!`);
+      await sendNtfyNotification(topic, state.role, "Testing notification!");
       alert('Test alert dispatched to phone & ntfy.sh/' + topic);
     });
 
     if (DOM.enableNotifBtn) {
-      DOM.enableNotifBtn.addEventListener('click', () => {
+      DOM.enableNotifBtn.addEventListener('click', async () => {
         if ('Notification' in window) {
-          Notification.requestPermission().then(permission => {
+          try {
+            const permission = await Notification.requestPermission();
             if (permission === 'granted') {
-              alert('Phone notifications enabled! You will now receive alerts when the bell is rung.');
-              triggerNativeNotification('🔔 Notifications Enabled!', 'You will get alerts when your partner rings.');
+              await triggerNativeNotification('🔔 Notifications Enabled!', 'You will now get alerts when your partner rings.');
+              alert('Phone notifications enabled successfully!');
             } else {
-              alert('Notification permission was denied. You can enable it in your browser site settings.');
+              alert('Notification permission was ' + permission + '. Check browser site settings.');
             }
-          });
+          } catch (err) {
+            alert('Notification request error: ' + err.message);
+          }
         } else {
           alert('Notifications are not supported by this browser.');
         }
@@ -252,21 +249,40 @@
     }
   }
 
-  // Native Browser Notification Trigger
-  function triggerNativeNotification(title, body) {
-    if ('Notification' in window && Notification.permission === 'granted') {
-      try {
-        new Notification(title, {
-          body: body,
-          icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%236366f1"><path d="M12 2a2 2 0 0 0-2 2v.29C7.12 5.14 5 7.82 5 11v6H3v2h18v-2h-2v-6c0-3.18-2.12-5.86-5-6.71V4a2 2 0 0 0-2-2zm0 20a3 3 0 0 0 3-3h-6a3 3 0 0 0 3 3z"/></svg>',
-          vibrate: [300, 100, 300, 100, 300],
-          tag: 'bell-urgent-call',
-          renotify: true,
-          requireInteraction: true
-        });
-      } catch (e) {
-        console.warn('Native notification trigger error:', e);
+  // Persistent Service Worker Notification for Android PWA
+  async function triggerNativeNotification(title, body) {
+    try {
+      if ('Notification' in window) {
+        if (Notification.permission === 'default') {
+          const perm = await Notification.requestPermission();
+          if (perm !== 'granted') return;
+        }
+
+        if (Notification.permission === 'granted') {
+          if ('serviceWorker' in navigator) {
+            try {
+              const reg = await navigator.serviceWorker.ready;
+              if (reg && reg.showNotification) {
+                await reg.showNotification(title, {
+                  body: body,
+                  icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%236366f1"><path d="M12 2a2 2 0 0 0-2 2v.29C7.12 5.14 5 7.82 5 11v6H3v2h18v-2h-2v-6c0-3.18-2.12-5.86-5-6.71V4a2 2 0 0 0-2-2zm0 20a3 3 0 0 0 3-3h-6a3 3 0 0 0 3 3z"/></svg>',
+                  vibrate: [300, 100, 300, 100, 300],
+                  tag: 'bell-urgent-call',
+                  renotify: true,
+                  requireInteraction: true,
+                  data: { url: './' }
+                });
+                return;
+              }
+            } catch (swErr) {
+              console.warn('SW notification fallback:', swErr);
+            }
+          }
+          new Notification(title, { body: body });
+        }
       }
+    } catch (e) {
+      console.warn('Notification error:', e);
     }
   }
 
@@ -306,20 +322,20 @@
       durationSeconds: null
     };
 
-    // 1. Store in local history & state
+    // Store in local history & state
     state.history.unshift(newRing);
     state.activeRing = newRing;
     saveHistory();
 
-    // 2. Immediate UI update
+    // Immediate UI update
     renderActiveCard();
     renderHistoryList();
 
-    // 3. Trigger native notification & ntfy push
-    triggerNativeNotification(`${state.role} needs assistance!`, finalMsg);
-    sendNtfyNotification(state.ntfyTopic, state.role, finalMsg);
+    // Trigger notification & ntfy push
+    await triggerNativeNotification(`${state.role} needs assistance!`, finalMsg);
+    await sendNtfyNotification(state.ntfyTopic, state.role, finalMsg);
 
-    // 4. Dispatch to Google Sheet if configured
+    // Dispatch to Google Sheet if configured
     sendToGoogleSheet({ action: 'ring', id: ringId, sender: state.role, message: finalMsg });
   }
 
@@ -331,7 +347,6 @@
     const now = new Date();
     const completedAt = now.toISOString();
 
-    // Update item in state.history
     const historyItem = state.history.find(item => item.id === ringId);
     if (historyItem) {
       historyItem.status = 'COMPLETED';
@@ -348,7 +363,7 @@
     renderHistoryList();
 
     // Dispatch completion notification
-    sendNtfyNotification(state.ntfyTopic, state.role, "Help request completed");
+    await sendNtfyNotification(state.ntfyTopic, state.role, "Help request completed");
     sendToGoogleSheet({ action: 'complete', id: ringId });
   }
 
@@ -393,7 +408,6 @@
 
           const ringId = 'ring_ntfy_' + entry.id;
 
-          // Check if already in local history
           const exists = state.history.some(item => item.id === ringId || (item.sender === sender && Math.abs(new Date(item.timestamp).getTime() - (entry.time * 1000)) < 15000));
 
           if (!exists) {
@@ -417,7 +431,7 @@
             }
           }
         } catch (err) {
-          // ignore parsing error for single line
+          // ignore malformed line
         }
       });
 
@@ -431,7 +445,6 @@
     }
   }
 
-  // Realtime Polling Loop
   function startPolling() {
     stopPolling();
     state.pollTimer = setInterval(fetchStatus, 3000);
@@ -444,7 +457,6 @@
     }
   }
 
-  // Render Active Ring Card
   function renderActiveCard() {
     if (state.activeRing && state.activeRing.status === 'PENDING') {
       DOM.activeCard.style.display = 'flex';
@@ -459,7 +471,6 @@
     }
   }
 
-  // Render History Feed List
   function renderHistoryList() {
     DOM.historyList.innerHTML = '';
 
@@ -500,7 +511,6 @@
     });
   }
 
-  // Format Helpers
   function formatTime(isoStr) {
     if (!isoStr) return '';
     const d = new Date(isoStr);
@@ -523,7 +533,6 @@
     })[match]);
   }
 
-  // Run initialization
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {

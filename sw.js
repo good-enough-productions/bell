@@ -1,6 +1,6 @@
-/* Service Worker for Tabby Bell PWA */
+/* Service Worker for Bell PWA */
 
-const CACHE_NAME = 'tabby-bell-v1';
+const CACHE_NAME = 'bell-v2';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -10,12 +10,12 @@ const ASSETS_TO_CACHE = [
 ];
 
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(ASSETS_TO_CACHE);
     })
   );
-  self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
@@ -34,9 +34,9 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Network first for API/Google Script calls, Cache fallback for static assets
+  // Bypass cache for API endpoints
   if (event.request.url.includes('script.google.com') || event.request.url.includes('ntfy.sh')) {
-    return; // Don't cache API calls
+    return;
   }
 
   event.respondWith(
@@ -71,7 +71,7 @@ self.addEventListener('push', (event) => {
     body: data.body || data.message || 'Urgent call from partner!',
     icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%236366f1"><path d="M12 2a2 2 0 0 0-2 2v.29C7.12 5.14 5 7.82 5 11v6H3v2h18v-2h-2v-6c0-3.18-2.12-5.86-5-6.71V4a2 2 0 0 0-2-2zm0 20a3 3 0 0 0 3-3h-6a3 3 0 0 0 3 3z"/></svg>',
     vibrate: [300, 100, 300, 100, 300],
-    tag: 'urgent-bell-call',
+    tag: 'bell-urgent-call',
     renotify: true,
     requireInteraction: true,
     data: { url: './' }
