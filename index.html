@@ -215,13 +215,32 @@
           </div>
         </div>
         <button id="save-settings-btn" class="btn btn-primary btn-full">Save Settings</button>
+
+        <div class="settings-card" style="border-color: var(--danger-primary); margin-top: 24px;">
+          <h3 style="color: var(--danger-primary);">⚠️ Reset &amp; Troubleshooting</h3>
+          <p class="card-desc">If the app is stuck displaying old alerts or looping, use the button below to clear all cached files, clear local storage, and download the latest update.</p>
+          <button id="reset-app-btn" class="btn btn-danger btn-full btn-sm" style="margin-top: 10px; background-color: var(--danger-primary);">
+            Clear Cache &amp; Reset App
+          </button>
+        </div>
       </section>
     </main>
   </div>
   <script src="app.js"></script>
   <script>
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js').then(r => console.log('SW ok', r)).catch(e => console.error('SW error', e));
+      navigator.serviceWorker.register('sw.js').then(reg => {
+        console.log('SW registered', reg);
+        reg.addEventListener('updatefound', () => {
+          const newWorker = reg.installing;
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              console.log('New content available, reloading...');
+              window.location.reload();
+            }
+          });
+        });
+      }).catch(e => console.error('SW error', e));
     }
   </script>
 </body>

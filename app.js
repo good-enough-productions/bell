@@ -64,7 +64,8 @@
     saveSettingsBtn: $('save-settings-btn'),
     testNtfyBtn: $('test-ntfy-btn'),
     soundToggle: $('sound-toggle'),
-    pollToggle: $('poll-toggle')
+    pollToggle: $('poll-toggle'),
+    resetAppBtn: $('reset-app-btn')
   };
 
   function init() {
@@ -188,6 +189,24 @@
     DOM.ntfyTopicInput.addEventListener('input', () => {
       state.ntfyTopic = DOM.ntfyTopicInput.value.trim();
       updateNtfyLink();
+    });
+    DOM.resetAppBtn.addEventListener('click', async () => {
+      if (confirm('This will clear all settings, local history, and force the app to redownload the latest update. Continue?')) {
+        localStorage.clear();
+        if ('serviceWorker' in navigator) {
+          try {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            for (const r of registrations) { await r.unregister(); }
+          } catch(e) { console.warn('SW unregister error:', e); }
+        }
+        if ('caches' in window) {
+          try {
+            const keys = await caches.keys();
+            for (const k of keys) { await caches.delete(k); }
+          } catch(e) { console.warn('Cache delete error:', e); }
+        }
+        window.location.reload(true);
+      }
     });
   }
 
