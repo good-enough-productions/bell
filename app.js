@@ -274,12 +274,33 @@
     renderHistoryList();
   }
 
+  function updateLocalRing(id, status, responseText) {
+    const localHistory = JSON.parse(localStorage.getItem('bell_localHistory') || '[]');
+    const ring = localHistory.find(r => r.id === id);
+    if (ring) {
+      ring.status = status;
+      if (responseText) {
+        ring.response = responseText;
+      }
+      if (status === 'COMPLETED' || status === 'cancelled') {
+        ring.completedAt = new Date().toISOString();
+        const start = new Date(ring.timestamp).getTime();
+        const end = new Date(ring.completedAt).getTime();
+        ring.durationSeconds = Math.max(0, Math.round((end - start) / 1000));
+      }
+      localStorage.setItem('bell_localHistory', JSON.stringify(localHistory));
+      state.history = localHistory;
+      renderHistoryList();
+    }
+  }
+
   async function cancelRing() {
     if (!state.activeRing) return;
     const id = state.activeRing.id;
     state.dismissedRingId = id;
     state.activeRing = null;
     renderRingTab();
+    updateLocalRing(id, 'COMPLETED', 'cancelled');
     if (state.gasUrl) {
       try { await gasPost({ action: 'complete', id, response: 'cancelled' }); }
       catch(e) { console.error('GAS cancel error:', e); }
@@ -300,6 +321,8 @@
 
     const isComplete = responseType === 'complete';
     const status = isComplete ? 'COMPLETED' : `RESPONDED: ${label}`;
+
+    updateLocalRing(id, status, fullResponse);
 
     if (state.gasUrl) {
       try { await gasPost({ action: 'complete', id, response: status }); }
