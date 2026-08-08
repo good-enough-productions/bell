@@ -12,18 +12,26 @@
 (function () {
   'use strict';
 
+  const Store = {
+    get: (key, fallback) => { const v = localStorage.getItem('bell_' + key); return v !== null ? v : fallback; },
+    set: (key, value) => localStorage.setItem('bell_' + key, value),
+    getJson: (key, fallback = []) => { const v = localStorage.getItem('bell_' + key); return v ? JSON.parse(v) : fallback; },
+    setJson: (key, value) => localStorage.setItem('bell_' + key, JSON.stringify(value)),
+    clear: () => localStorage.clear()
+  };
+
   const state = {
-    role: localStorage.getItem('bell_role') || 'partner1',
-    gasUrl: localStorage.getItem('bell_gasUrl') || '',
-    ntfyTopic: localStorage.getItem('bell_ntfyTopic') || '',
-    soundEnabled: localStorage.getItem('bell_sound') !== 'false',
-    pollEnabled: localStorage.getItem('bell_poll') !== 'false',
+    role: Store.get('role', 'partner1'),
+    gasUrl: Store.get('gasUrl', ''),
+    ntfyTopic: Store.get('ntfyTopic', ''),
+    soundEnabled: Store.get('sound', 'true') !== 'false',
+    pollEnabled: Store.get('poll', 'true') !== 'false',
     selectedPreset: '',
     activeRing: null,
     dismissedRingId: null,
     history: [],
     pollTimer: null,
-    lastSeenRingId: localStorage.getItem('bell_lastSeenRingId') || null
+    lastSeenRingId: Store.get('lastSeenRingId', null)
   };
 
   const $ = id => document.getElementById(id);
@@ -144,11 +152,11 @@
     state.soundEnabled = DOM.soundToggle.checked;
     state.pollEnabled = DOM.pollToggle.checked;
 
-    localStorage.setItem('bell_role', state.role);
-    localStorage.setItem('bell_gasUrl', state.gasUrl);
-    localStorage.setItem('bell_ntfyTopic', state.ntfyTopic);
-    localStorage.setItem('bell_sound', state.soundEnabled);
-    localStorage.setItem('bell_poll', state.pollEnabled);
+    Store.set('role', state.role);
+    Store.set('gasUrl', state.gasUrl);
+    Store.set('ntfyTopic', state.ntfyTopic);
+    Store.set('sound', state.soundEnabled);
+    Store.set('poll', state.pollEnabled);
 
     if (state.pollEnabled) startPolling(); else stopPolling();
     applyRoleUI();
@@ -194,7 +202,7 @@
     });
     DOM.resetAppBtn.addEventListener('click', async () => {
       if (confirm('This will clear all settings, local history, and force the app to redownload the latest update. Continue?')) {
-        localStorage.clear();
+        Store.clear();
         if ('serviceWorker' in navigator) {
           try {
             const registrations = await navigator.serviceWorker.getRegistrations();
@@ -220,13 +228,13 @@
     DOM.submitFeedbackBtn.disabled = true;
     DOM.submitFeedbackBtn.textContent = 'Submitting...';
     
-    const localFeedback = JSON.parse(localStorage.getItem('bell_feedback') || '[]');
+    const localFeedback = Store.getJson('feedback', []);
     localFeedback.push({
       timestamp: new Date().toISOString(),
       sender: state.role === 'partner1' ? 'Partner 1' : 'Partner 2',
       message: text
     });
-    localStorage.setItem('bell_feedback', JSON.stringify(localFeedback));
+    Store.setJson('feedback', localFeedback);
     
     if (state.gasUrl) {
       try {
@@ -327,12 +335,12 @@
 
   function saveLocalRing(ring) {
     state.history.unshift(ring);
-    localStorage.setItem('bell_localHistory', JSON.stringify(state.history.slice(0, 50)));
+    Store.setJson('localHistory', state.history.slice(0, 50));
     renderHistoryList();
   }
 
   function updateLocalRing(id, status, responseText) {
-    const localHistory = JSON.parse(localStorage.getItem('bell_localHistory') || '[]');
+    const localHistory = Store.getJson('localHistory', []);
     let changed = false;
     localHistory.forEach(ring => {
       const isComplete = (status === 'COMPLETED' || status === 'cancelled');
@@ -351,7 +359,7 @@
       }
     });
     if (changed) {
-      localStorage.setItem('bell_localHistory', JSON.stringify(localHistory));
+      Store.setJson('localHistory', localHistory);
       state.history = localHistory;
       renderHistoryList();
     }
@@ -416,80 +424,88 @@
   }
 
   async function fetchStatus() {
-    const localHistory = JSON.parse(localStorage.getItem('bell_localHistory') || '[]');
+    const localHistory = Store.getJson('localHistory', []);
 
     if (!state.gasUrl) {
-      let foundPending = false;
-      let changed = false;
-      localHistory.forEach(ring => {
-        if (ring.status === 'PENDING') {
-          if (!foundPending) {
-            foundPending = true;
-          } else {
-            ring.status = 'COMPLETED';
-            ring.completedAt = new Date().toISOString();
-            const start = new Date(ring.timestamp).getTime();
-            const end = new Date(ring.completedAt).getTime();
-            ring.durationSeconds = Math.max(0, Math.round((end - start) / 1000));
-            changed = true;
-          }
-        }
-      });
-      if (changed) {
-        localStorage.setItem('bell_localHistory', JSON.stringify(localHistory));
-      }
-
-      state.history = localHistory;
-      let active = localHistory.find(r => r.status === 'PENDING') || null;
-      if (active && active.id === state.dismissedRingId) {
-        active = null;
-      }
-      state.activeRing = active;
-      renderRingTab(); renderHistoryList();
+      syncLocalStatus(localHistory);
       return;
     }
 
     DOM.historyLoading.style.display = 'flex';
     try {
-      // redirect:follow is critical for GAS web apps
-      const res = await fetch(state.gasUrl, { method: 'GET', redirect: 'follow', cache: 'no-store' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      const data = await fetchRemoteState();
       DOM.historyLoading.style.display = 'none';
 
       if (data && !data.error) {
-        let active = data.active || null;
-        if (active && active.id === state.dismissedRingId) {
-          active = null;
-        } else if (!active || active.id !== state.dismissedRingId) {
-          state.dismissedRingId = null;
-        }
-
-        const prevActive = state.activeRing;
-        state.activeRing = active;
-        state.history = data.history || [];
-
-        // Partner 2: chime on new ring
-        if (state.role === 'partner2' && state.activeRing && state.activeRing.status === 'PENDING') {
-          if (state.activeRing.id !== state.lastSeenRingId) {
-            state.lastSeenRingId = state.activeRing.id;
-            localStorage.setItem('bell_lastSeenRingId', state.lastSeenRingId);
-            playBellChime();
-          }
-        }
-        renderRingTab(); renderHistoryList();
+        updateStateFromRemote(data);
       }
     } catch(err) {
       DOM.historyLoading.style.display = 'none';
       console.warn('fetchStatus error:', err.message);
-      state.history = localHistory;
-      let active = localHistory.find(r => r.status === 'PENDING') || null;
-      if (active && active.id === state.dismissedRingId) {
-        active = null;
-      }
-      state.activeRing = active;
-      renderRingTab(); renderHistoryList();
+      syncLocalStatus(localHistory);
     }
+  }
+
+  function syncLocalStatus(localHistory) {
+    let foundPending = false;
+    let changed = false;
+    localHistory.forEach(ring => {
+      if (ring.status === 'PENDING') {
+        if (!foundPending) {
+          foundPending = true;
+        } else {
+          ring.status = 'COMPLETED';
+          ring.completedAt = new Date().toISOString();
+          const start = new Date(ring.timestamp).getTime();
+          const end = new Date(ring.completedAt).getTime();
+          ring.durationSeconds = Math.max(0, Math.round((end - start) / 1000));
+          changed = true;
+        }
+      }
+    });
+    if (changed) {
+      Store.setJson('localHistory', localHistory);
+    }
+
+    state.history = localHistory;
+    let active = localHistory.find(r => r.status === 'PENDING') || null;
+    if (active && active.id === state.dismissedRingId) {
+      active = null;
+    }
+    state.activeRing = active;
+    updateUI();
+  }
+
+  async function fetchRemoteState() {
+    const res = await fetch(state.gasUrl, { method: 'GET', redirect: 'follow', cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  }
+
+  function updateStateFromRemote(data) {
+    let active = data.active || null;
+    if (active && active.id === state.dismissedRingId) {
+      active = null;
+    } else if (!active || active.id !== state.dismissedRingId) {
+      state.dismissedRingId = null;
+    }
+
+    state.activeRing = active;
+    state.history = data.history || [];
+
+    if (state.role === 'partner2' && state.activeRing && state.activeRing.status === 'PENDING') {
+      if (state.activeRing.id !== state.lastSeenRingId) {
+        state.lastSeenRingId = state.activeRing.id;
+        Store.set('lastSeenRingId', state.lastSeenRingId);
+        playBellChime();
+      }
+    }
+    updateUI();
+  }
+
+  function updateUI() {
+    renderRingTab();
+    renderHistoryList();
   }
 
   function startPolling() { stopPolling(); state.pollTimer = setInterval(fetchStatus, 5000); }

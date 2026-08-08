@@ -305,6 +305,12 @@
         </li>
       </ul>
 
+      <h3>Architectural Notes</h3>
+      <ul>
+        <li><strong>MVC-Lite Separation:</strong> <code>app.js</code> is structured to cleanly separate remote data fetching (<code>fetchRemoteState</code>), local state mutation (<code>updateStateFromRemote</code>, <code>syncLocalStatus</code>), and DOM rendering (<code>updateUI</code>).</li>
+        <li><strong>Centralized Store:</strong> All <code>localStorage</code> interactions run through a centralized <code>Store</code> object to prevent key typos and unify JSON serialization.</li>
+      </ul>
+
       <h3>Local Development &amp; Clasp Setup</h3>
       <p>The Apps Script is linked directly to your Google Sheet using Google clasp:</p>
       <pre><code># Install dependencies
@@ -370,6 +376,7 @@ npx clasp deploy -i &lt;DEPLOYMENT_ID&gt; -d "Update description"</code></pre>
       
       <h3>Backlog / Planned Tasks</h3>
       <ul>
+        <li><strong>Offline Action Queue:</strong> Store pending <code>gasPost</code> requests when offline and re-attempt them upon network restoration.</li>
         <li><strong>Multicast Rooms:</strong> Expand database columns and topics to allow group/family alert channels (more than 2 partners).</li>
         <li><strong>Chime Sound Settings:</strong> Let users adjust notification volume or select from pre-recorded bell ring types directly in Settings.</li>
         <li><strong>Status Polling Inactivity Sleep:</strong> Pause status polling loop after 1 hour of browser inactivity to conserve device battery and avoid hitting Google API limits.</li>
