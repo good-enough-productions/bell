@@ -1,7 +1,7 @@
 import { AppSettings, BellStatusResponse, Ring, UserRole } from '../types/bell';
 
-const SETTINGS_KEY = 'bell_pwa_settings_v2';
-const LOCAL_RINGS_KEY = 'bell_local_rings_v2';
+const SETTINGS_KEY = 'bell_pwa_settings_v3';
+const LOCAL_RINGS_KEY = 'bell_local_rings_v3';
 
 export const HARDCODED_NTFY_TOPIC = 'good-enough-bell-danny-bri';
 export const DEFAULT_APPS_SCRIPT_URL = '';
@@ -13,7 +13,7 @@ export function loadSettings(): AppSettings {
       const parsed = JSON.parse(saved);
       return {
         ...parsed,
-        ntfyTopic: parsed.ntfyTopic || HARDCODED_NTFY_TOPIC
+        ntfyTopic: HARDCODED_NTFY_TOPIC
       };
     }
   } catch (e) {
@@ -86,19 +86,28 @@ export async function ringBell(
   rings.unshift(newRing);
   saveLocalRings(rings);
 
-  // 2. Direct high-priority push via ntfy.sh (Instant lockscreen alert to Danny!)
+  // 2. Direct high-priority push via ntfy.sh JSON body (No forbidden HTTP headers for iOS Safari)
   const topic = ntfyTopic.trim() || HARDCODED_NTFY_TOPIC;
   try {
-    await fetch(`https://ntfy.sh/${topic}`, {
+    const payload = {
+      topic: topic,
+      title: `${sender} is Ringing the Bell!`,
+      message: finalMessage,
+      priority: 5,
+      tags: ['bell', 'warning', 'rotating_light'],
+      click: 'https://good-enough-productions.github.io/bell/',
+      actions: [
+        {
+          action: 'view',
+          label: '🏃 Open Bell / On My Way',
+          url: 'https://good-enough-productions.github.io/bell/'
+        }
+      ]
+    };
+
+    await fetch('https://ntfy.sh', {
       method: 'POST',
-      headers: {
-        'Title': `🔔 ${sender} is Ringing the Bell!`,
-        'Priority': '5',
-        'Tags': 'bell,warning,rotating_light',
-        'Click': 'https://good-enough-productions.github.io/bell/',
-        'Actions': 'view, 🏃 Open Bell / On My Way, https://good-enough-productions.github.io/bell/'
-      },
-      body: finalMessage
+      body: JSON.stringify(payload)
     });
   } catch (e) {
     console.warn('Direct ntfy push error:', e);
@@ -127,7 +136,8 @@ export async function ringBell(
 
 export async function acknowledgeRing(
   ringId: string,
-  appsScriptUrl?: string
+  appsScriptUrl?: string,
+  ntfyTopic: string = HARDCODED_NTFY_TOPIC
 ): Promise<boolean> {
   // Update local ring
   const rings = getLocalRings();
@@ -138,6 +148,24 @@ export async function acknowledgeRing(
     const duration = Math.round((new Date(target.completedAt).getTime() - new Date(target.timestamp).getTime()) / 1000);
     target.durationSeconds = duration > 0 ? duration : 1;
     saveLocalRings(rings);
+  }
+
+  // Broadcast acknowledgment to ntfy.sh so Bri's screen updates in real time!
+  const topic = ntfyTopic.trim() || HARDCODED_NTFY_TOPIC;
+  try {
+    const ackPayload = {
+      topic: topic,
+      title: 'Danny Answered!',
+      message: 'Danny is on his way!',
+      priority: 4,
+      tags: ['runner', 'white_check_mark']
+    };
+    await fetch('https://ntfy.sh', {
+      method: 'POST',
+      body: JSON.stringify(ackPayload)
+    });
+  } catch (e) {
+    console.warn('Direct ntfy ack broadcast error:', e);
   }
 
   if (appsScriptUrl && appsScriptUrl.trim()) {

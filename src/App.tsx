@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bell, Volume2, Settings as SettingsIcon, ShieldAlert, CheckCircle2, MessageSquare, X, Smartphone } from 'lucide-react';
+import { Bell, Volume2, Settings as SettingsIcon, ShieldAlert, MessageSquare, X, Smartphone } from 'lucide-react';
 import { AppSettings, Ring, UserRole } from './types/bell';
 import { acknowledgeRing, fetchBellStatus, HARDCODED_NTFY_TOPIC, loadSettings, ringBell, saveSettings } from './services/bellService';
 import { playBellChime, unlockAudio } from './utils/sound';
@@ -13,48 +13,98 @@ export function App() {
   const [showSettings, setShowSettings] = useState<boolean>(false);
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
   const [isRingingLoading, setIsRingingLoading] = useState<boolean>(false);
+  const [lastAckTime, setLastAckTime] = useState<number | null>(null);
 
   const audioIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isBri = settings.userRole === 'Bri';
 
-  // Poll for bell status every 3 seconds
+  // Listen to live Server-Sent Events (SSE) from ntfy.sh
   useEffect(() => {
-    let isMounted = true;
+    const topic = settings.ntfyTopic || HARDCODED_NTFY_TOPIC;
+    let eventSource: EventSource | null = null;
 
-    async function checkStatus() {
-      const data = await fetchBellStatus(settings.appsScriptUrl);
-      if (!isMounted) return;
+    try {
+      eventSource = new EventSource(`https://ntfy.sh/${topic}/sse`);
 
-      setActiveRing(data.active);
-      setHistory(data.history || []);
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.event === 'message') {
+            const title = data.title || '';
+            const msg = data.message || 'Need help!';
 
-      // If Danny is receiving a ring from Bri
-      if (data.active && data.active.sender === 'Bri' && data.active.status === 'PENDING' && settings.userRole === 'Danny') {
-        if (settings.soundEnabled && !audioIntervalRef.current) {
-          playBellChime();
-          triggerHaptic();
-          audioIntervalRef.current = setInterval(() => {
-            playBellChime();
-            triggerHaptic();
-          }, 3500);
+            if (title.includes('Ringing the Bell') || title.includes('Needs Help') || title.includes('Bri')) {
+              // Received new ring from Bri!
+              const newRing: Ring = {
+                id: data.id || 'ring_' + Date.now(),
+                timestamp: new Date(data.time ? data.time * 1000 : Date.now()).toISOString(),
+                sender: 'Bri',
+                message: msg,
+                status: 'PENDING'
+              };
+              setActiveRing(newRing);
+              setHistory(prev => [newRing, ...prev.filter(r => r.id !== newRing.id)]);
+
+              // If Danny is in Receiver mode, play alarm chime & vibrate!
+              if (settings.userRole === 'Danny') {
+                playBellChime();
+                triggerHaptic();
+                if (settings.soundEnabled && !audioIntervalRef.current) {
+                  audioIntervalRef.current = setInterval(() => {
+                    playBellChime();
+                    triggerHaptic();
+                  }, 3500);
+                }
+              }
+            } else if (title.includes('Answered') || title.includes('Danny')) {
+              // Danny answered!
+              if (audioIntervalRef.current) {
+                clearInterval(audioIntervalRef.current);
+                audioIntervalRef.current = null;
+              }
+              setActiveRing(null);
+              setLastAckTime(Date.now());
+              setHistory(prev =>
+                prev.map(r => (r.status === 'PENDING' ? { ...r, status: 'COMPLETED', completedAt: new Date().toISOString() } : r))
+              );
+            }
+          }
+        } catch (e) {
+          console.warn('SSE parse error:', e);
         }
-      } else {
-        if (audioIntervalRef.current) {
-          clearInterval(audioIntervalRef.current);
-          audioIntervalRef.current = null;
-        }
-      }
+      };
+
+      eventSource.onerror = () => {
+        // SSE reconnects automatically
+      };
+    } catch (e) {
+      console.warn('EventSource initialization error:', e);
     }
 
-    checkStatus();
-    const interval = setInterval(checkStatus, 3000);
-
     return () => {
-      isMounted = false;
-      clearInterval(interval);
-      if (audioIntervalRef.current) clearInterval(audioIntervalRef.current);
+      if (eventSource) {
+        eventSource.close();
+      }
+      if (audioIntervalRef.current) {
+        clearInterval(audioIntervalRef.current);
+        audioIntervalRef.current = null;
+      }
     };
-  }, [settings.appsScriptUrl, settings.userRole, settings.soundEnabled]);
+  }, [settings.ntfyTopic, settings.userRole, settings.soundEnabled]);
+
+  // Initial load of history & fallback poll
+  useEffect(() => {
+    let isMounted = true;
+    async function loadData() {
+      const data = await fetchBellStatus(settings.appsScriptUrl);
+      if (isMounted) {
+        if (data.active) setActiveRing(data.active);
+        if (data.history?.length) setHistory(data.history);
+      }
+    }
+    loadData();
+    return () => { isMounted = false; };
+  }, [settings.appsScriptUrl]);
 
   // Elapsed seconds timer for active ring
   useEffect(() => {
@@ -99,13 +149,10 @@ export function App() {
       audioIntervalRef.current = null;
     }
 
-    if (activeRing) {
-      await acknowledgeRing(activeRing.id, settings.appsScriptUrl);
-      setActiveRing(null);
-      const data = await fetchBellStatus(settings.appsScriptUrl);
-      setActiveRing(data.active);
-      setHistory(data.history || []);
-    }
+    const ringId = activeRing?.id || 'ring_ack';
+    setActiveRing(null);
+    setLastAckTime(Date.now());
+    await acknowledgeRing(ringId, settings.appsScriptUrl, settings.ntfyTopic);
   };
 
   const toggleUserRole = () => {
@@ -115,9 +162,7 @@ export function App() {
     saveSettings(updated);
   };
 
-  // Check if Danny answered Bri's recent ring
-  const latestCompletedRing = history.find(r => r.status === 'COMPLETED');
-  const wasRecentlyAnswered = latestCompletedRing && (Date.now() - new Date(latestCompletedRing.completedAt || '').getTime() < 30000);
+  const wasRecentlyAnswered = lastAckTime && (Date.now() - lastAckTime < 25000);
 
   return (
     <div className="min-h-screen bg-[#090D16] text-slate-100 flex flex-col justify-between font-sans selection:bg-amber-500/30">
@@ -201,7 +246,7 @@ export function App() {
                   Danny is On His Way!
                 </h2>
                 <p className="text-xs text-emerald-300/80">
-                  Answered in {latestCompletedRing.durationSeconds || 1}s
+                  Bell acknowledged and answered!
                 </p>
               </div>
             ) : null}
@@ -304,7 +349,7 @@ export function App() {
         <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 backdrop-blur-sm">
           <div className="flex items-center justify-between mb-3 text-xs font-semibold text-slate-400">
             <span>RECENT CALLS</span>
-            <span className="text-[10px] text-slate-500">Auto-saved</span>
+            <span className="text-[10px] text-slate-500">Live SSE Stream</span>
           </div>
 
           <div className="space-y-2 max-h-32 overflow-y-auto pr-1">
@@ -329,8 +374,8 @@ export function App() {
                     </div>
 
                     <div className="flex items-center space-x-2 text-slate-400 text-[11px]">
-                      {ring.durationSeconds ? (
-                        <span className="text-emerald-400 font-mono">✓ {ring.durationSeconds}s</span>
+                      {ring.status === 'COMPLETED' ? (
+                        <span className="text-emerald-400 font-mono">✓ Answered</span>
                       ) : (
                         <span className="text-amber-400 animate-pulse">Ringing</span>
                       )}
@@ -418,8 +463,8 @@ export function App() {
 
               {/* Hardcoded Topic Info */}
               <div className="p-3 rounded-xl bg-slate-800/60 border border-slate-800 text-slate-400">
-                <span className="font-semibold text-slate-300 block mb-1">Instant Push Alerts</span>
-                <span>Hardcoded topic: <code className="text-amber-400 font-mono">{HARDCODED_NTFY_TOPIC}</code></span>
+                <span className="font-semibold text-slate-300 block mb-1">Live Push Channel</span>
+                <span>Subscribed to: <code className="text-amber-400 font-mono">{HARDCODED_NTFY_TOPIC}</code></span>
               </div>
             </div>
 
