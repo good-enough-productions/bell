@@ -26,7 +26,7 @@ export function unlockAudio() {
 }
 
 /**
- * Plays a realistic dual-tone service bell chime
+ * Plays a loud, realistic dual-tone service bell chime
  */
 export function playBellChime() {
   try {
@@ -35,10 +35,10 @@ export function playBellChime() {
 
     // Frequencies: Fundamental (880Hz A5) + Harmonic Overtone (1760Hz A6) + Shimmer (2640Hz)
     const tones = [
-      { freq: 880, gain: 0.6, decay: 2.2 },
-      { freq: 1760, gain: 0.35, decay: 1.6 },
-      { freq: 2640, gain: 0.15, decay: 1.0 },
-      { freq: 3520, gain: 0.08, decay: 0.6 }
+      { freq: 880, gain: 0.85, decay: 2.5 },
+      { freq: 1760, gain: 0.55, decay: 1.8 },
+      { freq: 2640, gain: 0.25, decay: 1.2 },
+      { freq: 3520, gain: 0.12, decay: 0.8 }
     ];
 
     tones.forEach(({ freq, gain, decay }) => {
@@ -48,7 +48,7 @@ export function playBellChime() {
       osc.type = 'sine';
       osc.frequency.setValueAtTime(freq, now);
 
-      // Instant attack, exponential decay
+      // Instant attack, smooth exponential decay
       gainNode.gain.setValueAtTime(gain, now);
       gainNode.gain.exponentialRampToValueAtTime(0.0001, now + decay);
 

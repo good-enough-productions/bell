@@ -43,7 +43,7 @@ export function App() {
         audioIntervalRef.current = setInterval(() => {
           playBellChime();
           triggerHaptic();
-        }, 3500);
+        }, 2500);
       }
     }
   };
@@ -88,17 +88,20 @@ export function App() {
                   audioIntervalRef.current = setInterval(() => {
                     playBellChime();
                     triggerHaptic();
-                  }, 3500);
+                  }, 2500);
                 }
               }
             } else if (title.includes('Danny Answered')) {
-              // Danny answered!
+              // Danny answered
               if (audioIntervalRef.current) {
                 clearInterval(audioIntervalRef.current);
                 audioIntervalRef.current = null;
               }
               setActiveRing(null);
-              setAnsweredByDanny(true);
+              // Only Bri's screen shows the "Danny is on his way" banner
+              if (settings.userRole === 'Bri') {
+                setAnsweredByDanny(true);
+              }
               setHistory(prev =>
                 prev.map(r => (r.status === 'PENDING' ? { ...r, status: 'COMPLETED', completedAt: new Date().toISOString() } : r))
               );
@@ -184,6 +187,7 @@ export function App() {
 
     const ringId = activeRing?.id || 'ring_ack';
     setActiveRing(null);
+    // Smoothly return Danny to receiver idle without any self-notification
     await acknowledgeRing(ringId, settings.appsScriptUrl, settings.ntfyTopic);
   };
 
@@ -241,7 +245,7 @@ export function App() {
           <div className="w-full flex flex-col items-center">
             {/* If Bri has rung and it is pending Danny's answer */}
             {activeRing && activeRing.status === 'PENDING' ? (
-              <div className="w-full bg-slate-800/90 border-2 border-amber-500/60 rounded-3xl p-7 shadow-2xl text-center animate-pulse">
+              <div className="w-full bg-slate-800/90 border-2 border-amber-500/60 rounded-3xl p-7 shadow-2xl text-center">
                 <div className="relative w-20 h-20 mx-auto mb-4 flex items-center justify-center">
                   <div className="absolute inset-0 rounded-full bg-amber-500/20 animate-ping"></div>
                   <div className="w-16 h-16 rounded-full bg-amber-500/30 flex items-center justify-center border border-amber-500">
@@ -333,10 +337,10 @@ export function App() {
           /* ======================================================== */
           <div className="w-full flex flex-col items-center">
             {activeRing && activeRing.status === 'PENDING' ? (
-              /* Bri is Ringing Danny! (Urgent Alarm State) */
-              <div className="w-full bg-gradient-to-b from-amber-500/20 to-red-500/15 border-2 border-amber-500 rounded-3xl p-6 shadow-2xl shadow-amber-500/40 text-center animate-bounce">
+              /* Bri is Ringing Danny! (Urgent Solid Still Card - No Bouncing) */
+              <div className="w-full bg-gradient-to-b from-amber-500/20 to-red-500/15 border-2 border-amber-500 rounded-3xl p-6 shadow-2xl shadow-amber-500/40 text-center">
                 <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-amber-500 flex items-center justify-center shadow-lg shadow-amber-500/50">
-                  <ShieldAlert className="w-8 h-8 text-slate-950 animate-pulse" />
+                  <ShieldAlert className="w-8 h-8 text-slate-950" />
                 </div>
 
                 <h2 className="text-2xl font-black text-white mb-1">
@@ -351,7 +355,7 @@ export function App() {
 
                 <button
                   onClick={handleDannyAcknowledge}
-                  className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-extrabold text-xl shadow-lg shadow-emerald-500/30 active:scale-95 transition-all flex items-center justify-center space-x-2"
+                  className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-extrabold text-xl shadow-lg shadow-emerald-500/30 active:scale-95 transition-all flex items-center justify-center space-x-2 cursor-pointer"
                 >
                   <span>🏃</span>
                   <span>ON MY WAY!</span>

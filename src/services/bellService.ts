@@ -1,7 +1,6 @@
 import { AppSettings, BellStatusResponse, Ring, UserRole } from '../types/bell';
 
-const SETTINGS_KEY = 'bell_pwa_settings_v4';
-const LOCAL_RINGS_KEY = 'bell_local_rings_v4';
+const SETTINGS_KEY = 'bell_pwa_settings_v5';
 
 export const HARDCODED_NTFY_TOPIC = 'good-enough-bell-danny-bri';
 export const DEFAULT_APPS_SCRIPT_URL = '';
@@ -124,12 +123,13 @@ export async function ringBell(
 
   const topic = ntfyTopic.trim() || HARDCODED_NTFY_TOPIC;
   
-  // High-priority push with Danny's direct role link:
+  // High-priority push with loud "alarm" sound and direct role link:
   const payload = {
     topic: topic,
     title: `Bri is Ringing the Bell!`,
     message: finalMessage,
     priority: 5,
+    sound: 'alarm',
     tags: ['bell', 'warning', 'rotating_light'],
     click: 'https://good-enough-productions.github.io/bell/?role=Danny',
     actions: [
@@ -178,13 +178,13 @@ export async function acknowledgeRing(
 ): Promise<boolean> {
   const topic = ntfyTopic.trim() || HARDCODED_NTFY_TOPIC;
   
-  // Broadcast "Danny Answered"
+  // Broadcast "Danny Answered" (silent priority so it doesn't alarm Danny)
   try {
     const ackPayload = {
       topic: topic,
       title: 'Danny Answered!',
       message: 'Danny is on his way!',
-      priority: 4,
+      priority: 3,
       tags: ['runner', 'white_check_mark']
     };
     await fetch('https://ntfy.sh', {
@@ -217,7 +217,7 @@ export async function cancelRing(
       topic: topic,
       title: 'Bri Cancelled Ring',
       message: 'Ring cancelled by Bri',
-      priority: 3,
+      priority: 2,
       tags: ['x']
     };
     await fetch('https://ntfy.sh', {
