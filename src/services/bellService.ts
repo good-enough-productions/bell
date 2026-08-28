@@ -94,7 +94,9 @@ export async function ringBell(
       headers: {
         'Title': `🔔 ${sender} is Ringing the Bell!`,
         'Priority': '5',
-        'Tags': 'bell,warning,rotating_light'
+        'Tags': 'bell,warning,rotating_light',
+        'Click': 'https://good-enough-productions.github.io/bell/',
+        'Actions': 'view, 🏃 Open Bell / On My Way, https://good-enough-productions.github.io/bell/'
       },
       body: finalMessage
     });
