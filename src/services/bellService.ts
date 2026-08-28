@@ -1,22 +1,29 @@
 import { AppSettings, BellStatusResponse, Ring, UserRole } from '../types/bell';
 
-const SETTINGS_KEY = 'bell_pwa_settings_v1';
-const LOCAL_RINGS_KEY = 'bell_local_rings_v1';
+const SETTINGS_KEY = 'bell_pwa_settings_v2';
+const LOCAL_RINGS_KEY = 'bell_local_rings_v2';
+
+export const HARDCODED_NTFY_TOPIC = 'good-enough-bell-danny-bri';
+export const DEFAULT_APPS_SCRIPT_URL = '';
 
 export function loadSettings(): AppSettings {
   try {
     const saved = localStorage.getItem(SETTINGS_KEY);
     if (saved) {
-      return JSON.parse(saved);
+      const parsed = JSON.parse(saved);
+      return {
+        ...parsed,
+        ntfyTopic: parsed.ntfyTopic || HARDCODED_NTFY_TOPIC
+      };
     }
   } catch (e) {
     // Ignore parse errors
   }
   return {
-    userRole: 'Danny',
+    userRole: 'Bri', // Default to Bri on first launch
     soundEnabled: true,
-    appsScriptUrl: '',
-    ntfyTopic: 'schmidgall-household-bell'
+    appsScriptUrl: DEFAULT_APPS_SCRIPT_URL,
+    ntfyTopic: HARDCODED_NTFY_TOPIC
   };
 }
 
@@ -24,7 +31,7 @@ export function saveSettings(settings: AppSettings) {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
 }
 
-// Local mock history for offline / standalone mode
+// Local storage history
 function getLocalRings(): Ring[] {
   try {
     const saved = localStorage.getItem(LOCAL_RINGS_KEY);
@@ -60,25 +67,42 @@ export async function fetchBellStatus(appsScriptUrl?: string): Promise<BellStatu
 }
 
 export async function ringBell(
-  sender: UserRole,
+  sender: UserRole = 'Bri',
   message: string = 'Need help!',
   appsScriptUrl?: string,
-  ntfyTopic?: string
+  ntfyTopic: string = HARDCODED_NTFY_TOPIC
 ): Promise<Ring> {
+  const finalMessage = message.trim() ? message.trim() : 'Need help!';
   const newRing: Ring = {
     id: 'ring_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
     timestamp: new Date().toISOString(),
     sender,
-    message,
+    message: finalMessage,
     status: 'PENDING'
   };
 
-  // Save locally first
+  // 1. Save locally
   const rings = getLocalRings();
   rings.unshift(newRing);
   saveLocalRings(rings);
 
-  // Send to Apps Script backend if configured
+  // 2. Direct high-priority push via ntfy.sh (Instant lockscreen alert to Danny!)
+  const topic = ntfyTopic.trim() || HARDCODED_NTFY_TOPIC;
+  try {
+    await fetch(`https://ntfy.sh/${topic}`, {
+      method: 'POST',
+      headers: {
+        'Title': `🔔 ${sender} is Ringing the Bell!`,
+        'Priority': '5',
+        'Tags': 'bell,warning,rotating_light'
+      },
+      body: finalMessage
+    });
+  } catch (e) {
+    console.warn('Direct ntfy push error:', e);
+  }
+
+  // 3. Send to Google Apps Script backend if configured
   if (appsScriptUrl && appsScriptUrl.trim()) {
     try {
       await fetch(appsScriptUrl.trim(), {
@@ -87,29 +111,12 @@ export async function ringBell(
         body: JSON.stringify({
           action: 'ring',
           sender,
-          message,
-          ntfyTopic: ntfyTopic || ''
+          message: finalMessage,
+          ntfyTopic: topic
         })
       });
     } catch (e) {
-      console.warn('Backend ring error:', e);
-    }
-  }
-
-  // Also send directly to ntfy.sh topic for instant push
-  if (ntfyTopic && ntfyTopic.trim()) {
-    try {
-      await fetch(`https://ntfy.sh/${ntfyTopic.trim()}`, {
-        method: 'POST',
-        headers: {
-          'Title': '🔔 Urgent Bell Ring!',
-          'Priority': '5',
-          'Tags': 'bell,warning'
-        },
-        body: `${sender}: ${message}`
-      });
-    } catch (e) {
-      // Ignore ntfy fetch error
+      console.warn('Backend ring logging error:', e);
     }
   }
 

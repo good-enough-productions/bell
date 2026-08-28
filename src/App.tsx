@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bell, Volume2, VolumeX, Settings as SettingsIcon, CheckCircle, Clock, Send, ShieldAlert, Sparkles, X } from 'lucide-react';
+import { Bell, Volume2, Settings as SettingsIcon, ShieldAlert, CheckCircle2, MessageSquare, X, Smartphone } from 'lucide-react';
 import { AppSettings, Ring, UserRole } from './types/bell';
-import { acknowledgeRing, fetchBellStatus, loadSettings, ringBell, saveSettings } from './services/bellService';
+import { acknowledgeRing, fetchBellStatus, HARDCODED_NTFY_TOPIC, loadSettings, ringBell, saveSettings } from './services/bellService';
 import { playBellChime, unlockAudio } from './utils/sound';
 import { triggerHaptic } from './utils/haptics';
 
@@ -9,13 +9,13 @@ export function App() {
   const [settings, setSettings] = useState<AppSettings>(loadSettings);
   const [activeRing, setActiveRing] = useState<Ring | null>(null);
   const [history, setHistory] = useState<Ring[]>([]);
-  const [isRingingSelf, setIsRingingSelf] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  const [lastRungTime, setLastRungTime] = useState<number | null>(null);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [customNote, setCustomNote] = useState<string>('');
+  const [showSettings, setShowSettings] = useState<boolean>(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
+  const [isRingingLoading, setIsRingingLoading] = useState<boolean>(false);
 
-  const partnerRole: UserRole = settings.userRole === 'Danny' ? 'Bri' : 'Danny';
   const audioIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isBri = settings.userRole === 'Bri';
 
   // Poll for bell status every 3 seconds
   useEffect(() => {
@@ -28,15 +28,15 @@ export function App() {
       setActiveRing(data.active);
       setHistory(data.history || []);
 
-      // If partner is currently ringing, trigger chime & haptics!
-      if (data.active && data.active.sender !== settings.userRole && data.active.status === 'PENDING') {
+      // If Danny is receiving a ring from Bri
+      if (data.active && data.active.sender === 'Bri' && data.active.status === 'PENDING' && settings.userRole === 'Danny') {
         if (settings.soundEnabled && !audioIntervalRef.current) {
           playBellChime();
           triggerHaptic();
           audioIntervalRef.current = setInterval(() => {
             playBellChime();
             triggerHaptic();
-          }, 4000);
+          }, 3500);
         }
       } else {
         if (audioIntervalRef.current) {
@@ -56,7 +56,7 @@ export function App() {
     };
   }, [settings.appsScriptUrl, settings.userRole, settings.soundEnabled]);
 
-  // Elapsed seconds counter for active ring
+  // Elapsed seconds timer for active ring
   useEffect(() => {
     if (!activeRing || activeRing.status !== 'PENDING') {
       setElapsedSeconds(0);
@@ -74,20 +74,23 @@ export function App() {
     return () => clearInterval(timer);
   }, [activeRing]);
 
-  const handleRing = async () => {
+  // Bri rings the bell
+  const handleRingBell = async () => {
     unlockAudio();
-    setIsRingingSelf(true);
+    setIsRingingLoading(true);
     triggerHaptic();
     if (settings.soundEnabled) {
       playBellChime();
     }
 
-    const ring = await ringBell(settings.userRole, 'Need help!', settings.appsScriptUrl, settings.ntfyTopic);
+    const msg = customNote.trim() ? customNote.trim() : 'Need help!';
+    const ring = await ringBell('Bri', msg, settings.appsScriptUrl, settings.ntfyTopic);
     setActiveRing(ring);
-    setLastRungTime(Date.now());
     setHistory(prev => [ring, ...prev]);
+    setIsRingingLoading(false);
   };
 
+  // Danny acknowledges the ring
   const handleAcknowledge = async () => {
     unlockAudio();
     triggerHaptic();
@@ -99,8 +102,6 @@ export function App() {
     if (activeRing) {
       await acknowledgeRing(activeRing.id, settings.appsScriptUrl);
       setActiveRing(null);
-      setIsRingingSelf(false);
-      // Refresh status
       const data = await fetchBellStatus(settings.appsScriptUrl);
       setActiveRing(data.active);
       setHistory(data.history || []);
@@ -108,19 +109,20 @@ export function App() {
   };
 
   const toggleUserRole = () => {
-    const next: UserRole = settings.userRole === 'Danny' ? 'Bri' : 'Danny';
+    const next: UserRole = settings.userRole === 'Bri' ? 'Danny' : 'Bri';
     const updated = { ...settings, userRole: next };
     setSettings(updated);
     saveSettings(updated);
   };
 
-  const isPartnerRingingMe = activeRing && activeRing.sender !== settings.userRole && activeRing.status === 'PENDING';
-  const isMyRingPending = activeRing && activeRing.sender === settings.userRole && activeRing.status === 'PENDING';
+  // Check if Danny answered Bri's recent ring
+  const latestCompletedRing = history.find(r => r.status === 'COMPLETED');
+  const wasRecentlyAnswered = latestCompletedRing && (Date.now() - new Date(latestCompletedRing.completedAt || '').getTime() < 30000);
 
   return (
     <div className="min-h-screen bg-[#090D16] text-slate-100 flex flex-col justify-between font-sans selection:bg-amber-500/30">
       {/* Top Header */}
-      <header className="px-6 py-4 border-b border-slate-800/80 bg-slate-900/50 backdrop-blur-md sticky top-0 z-20">
+      <header className="px-6 py-4 border-b border-slate-800/80 bg-slate-900/60 backdrop-blur-md sticky top-0 z-20">
         <div className="max-w-md mx-auto flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/20">
@@ -130,7 +132,7 @@ export function App() {
               <h1 className="font-bold text-lg text-white leading-tight">Household Bell</h1>
               <div className="flex items-center space-x-1.5 text-xs text-emerald-400 font-medium">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span>Active & Ready</span>
+                <span>{isBri ? 'Bri (Ringer)' : 'Danny (Receiver)'}</span>
               </div>
             </div>
           </div>
@@ -141,8 +143,7 @@ export function App() {
               onClick={toggleUserRole}
               className="px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700/70 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition-all flex items-center space-x-1.5 shadow-sm active:scale-95"
             >
-              <span>{settings.userRole === 'Danny' ? '👨' : '👩'}</span>
-              <span>I am {settings.userRole}</span>
+              <span>{isBri ? '👩 Bri' : '👨 Danny'}</span>
             </button>
 
             {/* Settings Button */}
@@ -158,72 +159,142 @@ export function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-md w-full mx-auto p-6 flex flex-col justify-center items-center">
-        {/* State 1: Partner is Ringing You! (Urgent Call Alert) */}
-        {isPartnerRingingMe ? (
-          <div className="w-full bg-gradient-to-b from-amber-500/20 to-red-500/10 border-2 border-amber-500 rounded-3xl p-6 shadow-2xl shadow-amber-500/30 text-center animate-bounce">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-amber-500 flex items-center justify-center shadow-lg shadow-amber-500/50">
-              <ShieldAlert className="w-8 h-8 text-slate-950 animate-pulse" />
-            </div>
+        {/* ======================================================== */}
+        {/* VIEW 1: BRI'S SCREEN (THE CALLER)                        */}
+        {/* ======================================================== */}
+        {isBri ? (
+          <div className="w-full flex flex-col items-center">
+            {/* If Bri has rung and it is pending Danny's answer */}
+            {activeRing && activeRing.status === 'PENDING' ? (
+              <div className="w-full bg-slate-800/90 border-2 border-amber-500/60 rounded-3xl p-7 shadow-2xl text-center animate-pulse">
+                <div className="relative w-20 h-20 mx-auto mb-4 flex items-center justify-center">
+                  <div className="absolute inset-0 rounded-full bg-amber-500/20 animate-ping"></div>
+                  <div className="w-16 h-16 rounded-full bg-amber-500/30 flex items-center justify-center border border-amber-500">
+                    <Bell className="w-8 h-8 text-amber-400" />
+                  </div>
+                </div>
 
-            <h2 className="text-2xl font-black text-white mb-1">
-              🚨 {activeRing?.sender} Needs Help!
-            </h2>
-            <p className="text-sm text-amber-200/90 mb-4">
-              Ringing for <span className="font-mono font-bold text-white text-base">{elapsedSeconds}s</span>
-            </p>
+                <h2 className="text-2xl font-black text-white mb-1">
+                  Ringing Danny...
+                </h2>
+                <p className="text-sm text-amber-300 font-medium mb-1">
+                  "{activeRing.message}"
+                </p>
+                <p className="text-xs text-slate-400 mb-6 font-mono">
+                  Waiting for response ({elapsedSeconds}s)
+                </p>
 
-            <button
-              onClick={handleAcknowledge}
-              className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-extrabold text-lg shadow-lg shadow-emerald-500/30 active:scale-95 transition-all flex items-center justify-center space-x-2"
-            >
-              <span>🏃</span>
-              <span>ON MY WAY!</span>
-            </button>
-          </div>
-        ) : isMyRingPending ? (
-          /* State 2: You Rung the Bell and are Waiting */
-          <div className="w-full bg-slate-800/80 border border-amber-500/40 rounded-3xl p-8 shadow-xl text-center">
-            <div className="relative w-24 h-24 mx-auto mb-4 flex items-center justify-center">
-              <div className="absolute inset-0 rounded-full bg-amber-500/20 animate-ping"></div>
-              <div className="w-20 h-20 rounded-full bg-amber-500/30 flex items-center justify-center border border-amber-500">
-                <Bell className="w-10 h-10 text-amber-400 animate-pulse" />
+                <button
+                  onClick={handleAcknowledge}
+                  className="px-6 py-2.5 rounded-xl bg-slate-700/90 hover:bg-slate-600 text-xs font-semibold text-slate-300 transition-all active:scale-95"
+                >
+                  Dismiss / Cancel
+                </button>
               </div>
-            </div>
+            ) : wasRecentlyAnswered ? (
+              /* Danny just tapped On My Way! */
+              <div className="w-full bg-emerald-950/40 border-2 border-emerald-500/70 rounded-3xl p-7 shadow-2xl text-center mb-6 animate-fadeIn">
+                <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-emerald-500/20 flex items-center justify-center text-3xl">
+                  🏃
+                </div>
+                <h2 className="text-2xl font-black text-emerald-400 mb-1">
+                  Danny is On His Way!
+                </h2>
+                <p className="text-xs text-emerald-300/80">
+                  Answered in {latestCompletedRing.durationSeconds || 1}s
+                </p>
+              </div>
+            ) : null}
 
-            <h2 className="text-xl font-bold text-white mb-1">
-              Ringing {partnerRole}...
-            </h2>
-            <p className="text-xs text-slate-400 mb-6">
-              Waiting for response ({elapsedSeconds}s)
-            </p>
+            {/* Big Ring Bell Button (Only shown when not pending) */}
+            {(!activeRing || activeRing.status !== 'PENDING') && (
+              <>
+                <div className="relative group cursor-pointer mb-6" onClick={handleRingBell}>
+                  {/* Outer Glow Pulse */}
+                  <div className="absolute -inset-6 rounded-full bg-gradient-to-r from-amber-500/30 to-yellow-500/30 blur-2xl group-hover:blur-3xl transition-all opacity-80 group-hover:opacity-100"></div>
 
-            <button
-              onClick={handleAcknowledge}
-              className="px-6 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-xs font-semibold text-slate-300 transition-all active:scale-95"
-            >
-              Cancel / Dismiss
-            </button>
+                  {/* Giant Bell Button */}
+                  <button
+                    disabled={isRingingLoading}
+                    className="relative w-56 h-56 rounded-full bg-gradient-to-br from-amber-400 via-amber-500 to-amber-600 border-4 border-amber-300/40 shadow-2xl shadow-amber-500/40 flex flex-col items-center justify-center text-slate-950 active:scale-95 transition-all"
+                  >
+                    <Bell className="w-20 h-20 fill-current mb-2 drop-shadow-md" />
+                    <span className="font-black text-2xl tracking-wider">RING BELL</span>
+                    <span className="text-xs font-semibold opacity-90">Tap to call Danny</span>
+                  </button>
+                </div>
+
+                {/* Optional Custom Note Input */}
+                <div className="w-full max-w-sm">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Add note (optional)... e.g. Bring water"
+                      value={customNote}
+                      onChange={e => setCustomNote(e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 rounded-2xl bg-slate-800/80 border border-slate-700/80 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500 shadow-inner"
+                    />
+                    <MessageSquare className="w-4 h-4 text-slate-500 absolute left-3.5 top-3.5" />
+                    {customNote && (
+                      <button
+                        onClick={() => setCustomNote('')}
+                        className="absolute right-3.5 top-3.5 text-slate-500 hover:text-slate-300 text-xs"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         ) : (
-          /* State 3: Idle (Ready to Ring) */
+          /* ======================================================== */
+          /* VIEW 2: DANNY'S SCREEN (THE RECEIVER)                    */
+          /* ======================================================== */
           <div className="w-full flex flex-col items-center">
-            <div className="relative group cursor-pointer" onClick={handleRing}>
-              {/* Outer Pulse Glow */}
-              <div className="absolute -inset-6 rounded-full bg-gradient-to-r from-amber-500/30 to-yellow-500/30 blur-2xl group-hover:blur-3xl transition-all opacity-75 group-hover:opacity-100"></div>
+            {activeRing && activeRing.status === 'PENDING' ? (
+              /* Bri is Ringing Danny! (Urgent Alarm State) */
+              <div className="w-full bg-gradient-to-b from-amber-500/20 to-red-500/15 border-2 border-amber-500 rounded-3xl p-6 shadow-2xl shadow-amber-500/40 text-center animate-bounce">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-amber-500 flex items-center justify-center shadow-lg shadow-amber-500/50">
+                  <ShieldAlert className="w-8 h-8 text-slate-950 animate-pulse" />
+                </div>
 
-              {/* Giant Bell Button */}
-              <button
-                className="relative w-56 h-56 rounded-full bg-gradient-to-br from-amber-400 via-amber-500 to-amber-600 border-4 border-amber-300/40 shadow-2xl shadow-amber-500/40 flex flex-col items-center justify-center text-slate-950 active:scale-95 transition-all"
-              >
-                <Bell className="w-20 h-20 fill-current mb-2 drop-shadow-md" />
-                <span className="font-black text-xl tracking-wider">RING BELL</span>
-                <span className="text-[11px] font-semibold opacity-90">Need Help!</span>
-              </button>
-            </div>
+                <h2 className="text-2xl font-black text-white mb-1">
+                  🚨 Bri Needs Help!
+                </h2>
+                <div className="my-3 px-4 py-2.5 rounded-xl bg-slate-900/60 border border-amber-500/30 text-amber-200 font-semibold text-base">
+                  "{activeRing.message}"
+                </div>
+                <p className="text-xs text-slate-300 mb-5">
+                  Ringing for <span className="font-mono font-bold text-white text-sm">{elapsedSeconds}s</span>
+                </p>
 
-            <p className="mt-8 text-center text-xs text-slate-400 max-w-xs">
-              Tap to alert <span className="font-semibold text-slate-200">{partnerRole}</span> on their phone with an instant chime & alert.
-            </p>
+                <button
+                  onClick={handleAcknowledge}
+                  className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-extrabold text-xl shadow-lg shadow-emerald-500/30 active:scale-95 transition-all flex items-center justify-center space-x-2"
+                >
+                  <span>🏃</span>
+                  <span>ON MY WAY!</span>
+                </button>
+              </div>
+            ) : (
+              /* Danny Idle State */
+              <div className="w-full text-center py-10">
+                <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-slate-800/80 border border-slate-700/60 flex items-center justify-center text-slate-400">
+                  <Smartphone className="w-9 h-9 opacity-60" />
+                </div>
+                <h3 className="font-bold text-lg text-slate-200 mb-1">Receiver Mode</h3>
+                <p className="text-xs text-slate-400 max-w-xs mx-auto mb-6">
+                  Ready to receive calls from Bri. Your phone will chime and alert when she rings.
+                </p>
+
+                <div className="inline-flex items-center space-x-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span>Push Channel: {HARDCODED_NTFY_TOPIC}</span>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </main>
@@ -233,17 +304,16 @@ export function App() {
         <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 backdrop-blur-sm">
           <div className="flex items-center justify-between mb-3 text-xs font-semibold text-slate-400">
             <span>RECENT CALLS</span>
-            <span className="text-[10px] text-slate-500">Auto-logged to Sheets</span>
+            <span className="text-[10px] text-slate-500">Auto-saved</span>
           </div>
 
-          <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
+          <div className="space-y-2 max-h-32 overflow-y-auto pr-1">
             {history.length === 0 ? (
-              <div className="py-4 text-center text-xs text-slate-500">
-                No recent rings. Tap the bell anytime you need help!
+              <div className="py-3 text-center text-xs text-slate-500">
+                No recent rings recorded yet.
               </div>
             ) : (
               history.slice(0, 4).map(ring => {
-                const isDanny = ring.sender === 'Danny';
                 const time = ring.timestamp ? new Date(ring.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
                 return (
                   <div
@@ -251,11 +321,9 @@ export function App() {
                     className="flex items-center justify-between p-2.5 rounded-xl bg-slate-800/50 border border-slate-800/40 text-xs"
                   >
                     <div className="flex items-center space-x-2">
-                      <span>{isDanny ? '👨' : '👩'}</span>
-                      <span className="font-medium text-slate-200">
-                        {ring.sender}
-                      </span>
-                      <span className="text-slate-500 text-[11px]">
+                      <span>👩</span>
+                      <span className="font-medium text-slate-200">Bri</span>
+                      <span className="text-slate-400 text-[11px] truncate max-w-[130px]">
                         "{ring.message}"
                       </span>
                     </div>
@@ -264,7 +332,7 @@ export function App() {
                       {ring.durationSeconds ? (
                         <span className="text-emerald-400 font-mono">✓ {ring.durationSeconds}s</span>
                       ) : (
-                        <span className="text-amber-400">Pending</span>
+                        <span className="text-amber-400 animate-pulse">Ringing</span>
                       )}
                       <span>{time}</span>
                     </div>
@@ -278,7 +346,7 @@ export function App() {
 
       {/* Settings Modal */}
       {showSettings && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-sm w-full p-6 shadow-2xl relative">
             <button
               onClick={() => setShowSettings(false)}
@@ -295,22 +363,8 @@ export function App() {
             <div className="space-y-4 text-xs">
               {/* Identity Setting */}
               <div>
-                <label className="block text-slate-400 font-medium mb-1.5">My Identity</label>
+                <label className="block text-slate-400 font-medium mb-1.5">Active Mode</label>
                 <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => {
-                      const updated = { ...settings, userRole: 'Danny' as UserRole };
-                      setSettings(updated);
-                      saveSettings(updated);
-                    }}
-                    className={`py-2 rounded-xl font-semibold border transition-all ${
-                      settings.userRole === 'Danny'
-                        ? 'bg-amber-500/20 border-amber-500 text-amber-300'
-                        : 'bg-slate-800 border-slate-700 text-slate-400'
-                    }`}
-                  >
-                    👨 Danny
-                  </button>
                   <button
                     onClick={() => {
                       const updated = { ...settings, userRole: 'Bri' as UserRole };
@@ -318,12 +372,26 @@ export function App() {
                       saveSettings(updated);
                     }}
                     className={`py-2 rounded-xl font-semibold border transition-all ${
-                      settings.userRole === 'Bri'
+                      isBri
                         ? 'bg-amber-500/20 border-amber-500 text-amber-300'
                         : 'bg-slate-800 border-slate-700 text-slate-400'
                     }`}
                   >
-                    👩 Bri
+                    👩 Bri (Caller)
+                  </button>
+                  <button
+                    onClick={() => {
+                      const updated = { ...settings, userRole: 'Danny' as UserRole };
+                      setSettings(updated);
+                      saveSettings(updated);
+                    }}
+                    className={`py-2 rounded-xl font-semibold border transition-all ${
+                      !isBri
+                        ? 'bg-amber-500/20 border-amber-500 text-amber-300'
+                        : 'bg-slate-800 border-slate-700 text-slate-400'
+                    }`}
+                  >
+                    👨 Danny (Receiver)
                   </button>
                 </div>
               </div>
@@ -334,7 +402,7 @@ export function App() {
                 <div className="flex items-center justify-between p-3 rounded-xl bg-slate-800 border border-slate-700">
                   <div className="flex items-center space-x-2 text-slate-200 font-medium">
                     <Volume2 className="w-4 h-4 text-amber-400" />
-                    <span>Play Sound on Ring</span>
+                    <span>Bell Chime</span>
                   </div>
                   <button
                     onClick={() => {
@@ -348,46 +416,10 @@ export function App() {
                 </div>
               </div>
 
-              {/* Google Apps Script Backend URL */}
-              <div>
-                <label className="block text-slate-400 font-medium mb-1">
-                  Apps Script Web App URL (Optional)
-                </label>
-                <input
-                  type="text"
-                  placeholder="https://script.google.com/macros/s/.../exec"
-                  value={settings.appsScriptUrl}
-                  onChange={e => {
-                    const updated = { ...settings, appsScriptUrl: e.target.value };
-                    setSettings(updated);
-                    saveSettings(updated);
-                  }}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-200 focus:outline-none focus:border-amber-500"
-                />
-                <span className="text-[10px] text-slate-500 mt-1 block">
-                  Connects to the Bell_Database script to auto-log rings to Google Sheets.
-                </span>
-              </div>
-
-              {/* ntfy.sh Topic */}
-              <div>
-                <label className="block text-slate-400 font-medium mb-1">
-                  Push Notification Topic (ntfy.sh)
-                </label>
-                <input
-                  type="text"
-                  placeholder="schmidgall-household-bell"
-                  value={settings.ntfyTopic}
-                  onChange={e => {
-                    const updated = { ...settings, ntfyTopic: e.target.value };
-                    setSettings(updated);
-                    saveSettings(updated);
-                  }}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-200 focus:outline-none focus:border-amber-500 font-mono"
-                />
-                <span className="text-[10px] text-slate-500 mt-1 block">
-                  Subscribe to this topic on the free ntfy iOS/Android app for instant lock-screen alerts.
-                </span>
+              {/* Hardcoded Topic Info */}
+              <div className="p-3 rounded-xl bg-slate-800/60 border border-slate-800 text-slate-400">
+                <span className="font-semibold text-slate-300 block mb-1">Instant Push Alerts</span>
+                <span>Hardcoded topic: <code className="text-amber-400 font-mono">{HARDCODED_NTFY_TOPIC}</code></span>
               </div>
             </div>
 
