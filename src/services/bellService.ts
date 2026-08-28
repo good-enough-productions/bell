@@ -1,26 +1,39 @@
 import { AppSettings, BellStatusResponse, Ring, UserRole } from '../types/bell';
 
-const SETTINGS_KEY = 'bell_pwa_settings_v3';
-const LOCAL_RINGS_KEY = 'bell_local_rings_v3';
+const SETTINGS_KEY = 'bell_pwa_settings_v4';
+const LOCAL_RINGS_KEY = 'bell_local_rings_v4';
 
 export const HARDCODED_NTFY_TOPIC = 'good-enough-bell-danny-bri';
 export const DEFAULT_APPS_SCRIPT_URL = '';
 
 export function loadSettings(): AppSettings {
+  // Check URL query param first: e.g. ?role=Danny or ?role=Bri
+  let queryRole: UserRole | null = null;
+  if (typeof window !== 'undefined') {
+    const params = new URLSearchParams(window.location.search);
+    const r = params.get('role');
+    if (r === 'Danny' || r === 'Bri') {
+      queryRole = r;
+    }
+  }
+
   try {
     const saved = localStorage.getItem(SETTINGS_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
+      const effectiveRole = queryRole || parsed.userRole || 'Bri';
       return {
         ...parsed,
+        userRole: effectiveRole,
         ntfyTopic: HARDCODED_NTFY_TOPIC
       };
     }
   } catch (e) {
     // Ignore parse errors
   }
+
   return {
-    userRole: 'Bri', // Default to Bri on first launch
+    userRole: queryRole || 'Bri',
     soundEnabled: true,
     appsScriptUrl: DEFAULT_APPS_SCRIPT_URL,
     ntfyTopic: HARDCODED_NTFY_TOPIC
@@ -31,39 +44,67 @@ export function saveSettings(settings: AppSettings) {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
 }
 
-// Local storage history
-function getLocalRings(): Ring[] {
+// Fetch real-time status and recent history directly from ntfy.sh buffer
+export async function fetchNtfyHistory(topic: string = HARDCODED_NTFY_TOPIC): Promise<BellStatusResponse> {
   try {
-    const saved = localStorage.getItem(LOCAL_RINGS_KEY);
-    if (saved) return JSON.parse(saved);
-  } catch (e) {}
-  return [];
-}
+    const res = await fetch(`https://ntfy.sh/${topic}/json?poll=1&since=12h`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-function saveLocalRings(rings: Ring[]) {
-  localStorage.setItem(LOCAL_RINGS_KEY, JSON.stringify(rings.slice(0, 30)));
-}
+    const text = await res.text();
+    const lines = text.trim().split('\n').filter(Boolean);
+    const messages = lines.map(line => {
+      try { return JSON.parse(line); } catch (e) { return null; }
+    }).filter(Boolean);
 
-export async function fetchBellStatus(appsScriptUrl?: string): Promise<BellStatusResponse> {
-  if (appsScriptUrl && appsScriptUrl.trim()) {
-    try {
-      const res = await fetch(appsScriptUrl.trim(), { method: 'GET' });
-      if (res.ok) {
-        const data = await res.json();
-        return data;
+    const history: Ring[] = [];
+    let latestRing: Ring | null = null;
+    let latestRingTime = 0;
+    let latestAckTime = 0;
+
+    for (const msg of messages) {
+      if (msg.event !== 'message') continue;
+      const title = msg.title || '';
+      const timeMs = (msg.time || 0) * 1000;
+
+      if (title.includes('Ringing the Bell') || title.includes('Needs Help') || title.includes('Bri is Ringing')) {
+        const ring: Ring = {
+          id: msg.id || 'ring_' + timeMs,
+          timestamp: new Date(timeMs).toISOString(),
+          sender: 'Bri',
+          message: msg.message || 'Need help!',
+          status: 'PENDING'
+        };
+        history.unshift(ring);
+        if (timeMs > latestRingTime) {
+          latestRingTime = timeMs;
+          latestRing = ring;
+        }
+      } else if (title.includes('Danny Answered') || title.includes('Cancelled')) {
+        if (timeMs > latestAckTime) {
+          latestAckTime = timeMs;
+        }
       }
-    } catch (e) {
-      console.warn('Backend fetch error, using local state:', e);
     }
-  }
 
-  // Fallback to local storage state
-  const rings = getLocalRings();
-  const active = rings.find(r => r.status === 'PENDING') || null;
-  return {
-    active,
-    history: rings
-  };
+    // Check if the latest ring is still active (unanswered and within the last 20 minutes)
+    const isRingActive = latestRing && (latestRingTime > latestAckTime) && (Date.now() - latestRingTime < 20 * 60 * 1000);
+    
+    // Update statuses in history list
+    for (const h of history) {
+      const hTime = new Date(h.timestamp).getTime();
+      if (hTime <= latestAckTime) {
+        h.status = 'COMPLETED';
+      }
+    }
+
+    return {
+      active: isRingActive ? latestRing : null,
+      history: history.slice(0, 20)
+    };
+  } catch (e) {
+    console.warn('Failed to poll ntfy history:', e);
+    return { active: null, history: [] };
+  }
 }
 
 export async function ringBell(
@@ -81,39 +122,35 @@ export async function ringBell(
     status: 'PENDING'
   };
 
-  // 1. Save locally
-  const rings = getLocalRings();
-  rings.unshift(newRing);
-  saveLocalRings(rings);
-
-  // 2. Direct high-priority push via ntfy.sh JSON body (No forbidden HTTP headers for iOS Safari)
   const topic = ntfyTopic.trim() || HARDCODED_NTFY_TOPIC;
-  try {
-    const payload = {
-      topic: topic,
-      title: `${sender} is Ringing the Bell!`,
-      message: finalMessage,
-      priority: 5,
-      tags: ['bell', 'warning', 'rotating_light'],
-      click: 'https://good-enough-productions.github.io/bell/',
-      actions: [
-        {
-          action: 'view',
-          label: '🏃 Open Bell / On My Way',
-          url: 'https://good-enough-productions.github.io/bell/'
-        }
-      ]
-    };
+  
+  // High-priority push with Danny's direct role link:
+  const payload = {
+    topic: topic,
+    title: `Bri is Ringing the Bell!`,
+    message: finalMessage,
+    priority: 5,
+    tags: ['bell', 'warning', 'rotating_light'],
+    click: 'https://good-enough-productions.github.io/bell/?role=Danny',
+    actions: [
+      {
+        action: 'view',
+        label: '🏃 Open Bell / On My Way',
+        url: 'https://good-enough-productions.github.io/bell/?role=Danny'
+      }
+    ]
+  };
 
+  try {
     await fetch('https://ntfy.sh', {
       method: 'POST',
       body: JSON.stringify(payload)
     });
   } catch (e) {
-    console.warn('Direct ntfy push error:', e);
+    console.warn('ntfy ring broadcast error:', e);
   }
 
-  // 3. Send to Google Apps Script backend if configured
+  // Google Apps Script logging if configured
   if (appsScriptUrl && appsScriptUrl.trim()) {
     try {
       await fetch(appsScriptUrl.trim(), {
@@ -127,7 +164,7 @@ export async function ringBell(
         })
       });
     } catch (e) {
-      console.warn('Backend ring logging error:', e);
+      console.warn('Apps Script ring log error:', e);
     }
   }
 
@@ -139,19 +176,9 @@ export async function acknowledgeRing(
   appsScriptUrl?: string,
   ntfyTopic: string = HARDCODED_NTFY_TOPIC
 ): Promise<boolean> {
-  // Update local ring
-  const rings = getLocalRings();
-  const target = rings.find(r => r.id === ringId);
-  if (target) {
-    target.status = 'COMPLETED';
-    target.completedAt = new Date().toISOString();
-    const duration = Math.round((new Date(target.completedAt).getTime() - new Date(target.timestamp).getTime()) / 1000);
-    target.durationSeconds = duration > 0 ? duration : 1;
-    saveLocalRings(rings);
-  }
-
-  // Broadcast acknowledgment to ntfy.sh so Bri's screen updates in real time!
   const topic = ntfyTopic.trim() || HARDCODED_NTFY_TOPIC;
+  
+  // Broadcast "Danny Answered"
   try {
     const ackPayload = {
       topic: topic,
@@ -165,7 +192,7 @@ export async function acknowledgeRing(
       body: JSON.stringify(ackPayload)
     });
   } catch (e) {
-    console.warn('Direct ntfy ack broadcast error:', e);
+    console.warn('ntfy ack error:', e);
   }
 
   if (appsScriptUrl && appsScriptUrl.trim()) {
@@ -173,16 +200,32 @@ export async function acknowledgeRing(
       await fetch(appsScriptUrl.trim(), {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({
-          action: 'complete',
-          id: ringId
-        })
+        body: JSON.stringify({ action: 'complete', id: ringId })
       });
-      return true;
-    } catch (e) {
-      console.warn('Backend acknowledge error:', e);
-    }
+    } catch (e) {}
   }
 
+  return true;
+}
+
+export async function cancelRing(
+  ntfyTopic: string = HARDCODED_NTFY_TOPIC
+): Promise<boolean> {
+  const topic = ntfyTopic.trim() || HARDCODED_NTFY_TOPIC;
+  try {
+    const cancelPayload = {
+      topic: topic,
+      title: 'Bri Cancelled Ring',
+      message: 'Ring cancelled by Bri',
+      priority: 3,
+      tags: ['x']
+    };
+    await fetch('https://ntfy.sh', {
+      method: 'POST',
+      body: JSON.stringify(cancelPayload)
+    });
+  } catch (e) {
+    console.warn('ntfy cancel error:', e);
+  }
   return true;
 }

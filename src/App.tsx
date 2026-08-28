@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Bell, Volume2, Settings as SettingsIcon, ShieldAlert, MessageSquare, X, Smartphone } from 'lucide-react';
 import { AppSettings, Ring, UserRole } from './types/bell';
-import { acknowledgeRing, fetchBellStatus, HARDCODED_NTFY_TOPIC, loadSettings, ringBell, saveSettings } from './services/bellService';
+import { acknowledgeRing, cancelRing, fetchNtfyHistory, HARDCODED_NTFY_TOPIC, loadSettings, ringBell, saveSettings } from './services/bellService';
 import { playBellChime, unlockAudio } from './utils/sound';
 import { triggerHaptic } from './utils/haptics';
 
@@ -13,10 +13,44 @@ export function App() {
   const [showSettings, setShowSettings] = useState<boolean>(false);
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
   const [isRingingLoading, setIsRingingLoading] = useState<boolean>(false);
-  const [lastAckTime, setLastAckTime] = useState<number | null>(null);
+  const [answeredByDanny, setAnsweredByDanny] = useState<boolean>(false);
 
   const audioIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isBri = settings.userRole === 'Bri';
+
+  // Check URL param on mount: ?role=Danny or ?role=Bri
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const roleParam = params.get('role');
+    if (roleParam === 'Danny' || roleParam === 'Bri') {
+      const updated = { ...settings, userRole: roleParam as UserRole };
+      setSettings(updated);
+      saveSettings(updated);
+    }
+  }, []);
+
+  // Initial State Hydration from ntfy server buffer
+  const loadNtfyData = async () => {
+    const data = await fetchNtfyHistory(settings.ntfyTopic);
+    setActiveRing(data.active);
+    setHistory(data.history || []);
+
+    // If Danny is in Receiver mode and there is an active ring, start alarm
+    if (data.active && settings.userRole === 'Danny') {
+      playBellChime();
+      triggerHaptic();
+      if (settings.soundEnabled && !audioIntervalRef.current) {
+        audioIntervalRef.current = setInterval(() => {
+          playBellChime();
+          triggerHaptic();
+        }, 3500);
+      }
+    }
+  };
+
+  useEffect(() => {
+    loadNtfyData();
+  }, [settings.ntfyTopic, settings.userRole]);
 
   // Listen to live Server-Sent Events (SSE) from ntfy.sh
   useEffect(() => {
@@ -33,7 +67,7 @@ export function App() {
             const title = data.title || '';
             const msg = data.message || 'Need help!';
 
-            if (title.includes('Ringing the Bell') || title.includes('Needs Help') || title.includes('Bri')) {
+            if (title.includes('Ringing the Bell') || title.includes('Bri is Ringing')) {
               // Received new ring from Bri!
               const newRing: Ring = {
                 id: data.id || 'ring_' + Date.now(),
@@ -43,9 +77,10 @@ export function App() {
                 status: 'PENDING'
               };
               setActiveRing(newRing);
+              setAnsweredByDanny(false);
               setHistory(prev => [newRing, ...prev.filter(r => r.id !== newRing.id)]);
 
-              // If Danny is in Receiver mode, play alarm chime & vibrate!
+              // If Danny is in Receiver mode, trigger alarm chime & vibrate!
               if (settings.userRole === 'Danny') {
                 playBellChime();
                 triggerHaptic();
@@ -56,55 +91,43 @@ export function App() {
                   }, 3500);
                 }
               }
-            } else if (title.includes('Answered') || title.includes('Danny')) {
+            } else if (title.includes('Danny Answered')) {
               // Danny answered!
               if (audioIntervalRef.current) {
                 clearInterval(audioIntervalRef.current);
                 audioIntervalRef.current = null;
               }
               setActiveRing(null);
-              setLastAckTime(Date.now());
+              setAnsweredByDanny(true);
               setHistory(prev =>
                 prev.map(r => (r.status === 'PENDING' ? { ...r, status: 'COMPLETED', completedAt: new Date().toISOString() } : r))
               );
+            } else if (title.includes('Bri Cancelled')) {
+              // Bri cancelled ring
+              if (audioIntervalRef.current) {
+                clearInterval(audioIntervalRef.current);
+                audioIntervalRef.current = null;
+              }
+              setActiveRing(null);
+              setAnsweredByDanny(false);
             }
           }
         } catch (e) {
           console.warn('SSE parse error:', e);
         }
       };
-
-      eventSource.onerror = () => {
-        // SSE reconnects automatically
-      };
     } catch (e) {
       console.warn('EventSource initialization error:', e);
     }
 
     return () => {
-      if (eventSource) {
-        eventSource.close();
-      }
+      if (eventSource) eventSource.close();
       if (audioIntervalRef.current) {
         clearInterval(audioIntervalRef.current);
         audioIntervalRef.current = null;
       }
     };
   }, [settings.ntfyTopic, settings.userRole, settings.soundEnabled]);
-
-  // Initial load of history & fallback poll
-  useEffect(() => {
-    let isMounted = true;
-    async function loadData() {
-      const data = await fetchBellStatus(settings.appsScriptUrl);
-      if (isMounted) {
-        if (data.active) setActiveRing(data.active);
-        if (data.history?.length) setHistory(data.history);
-      }
-    }
-    loadData();
-    return () => { isMounted = false; };
-  }, [settings.appsScriptUrl]);
 
   // Elapsed seconds timer for active ring
   useEffect(() => {
@@ -136,12 +159,22 @@ export function App() {
     const msg = customNote.trim() ? customNote.trim() : 'Need help!';
     const ring = await ringBell('Bri', msg, settings.appsScriptUrl, settings.ntfyTopic);
     setActiveRing(ring);
+    setAnsweredByDanny(false);
     setHistory(prev => [ring, ...prev]);
     setIsRingingLoading(false);
   };
 
+  // Bri cancels her active ring
+  const handleBriCancel = async () => {
+    unlockAudio();
+    triggerHaptic();
+    setActiveRing(null);
+    setAnsweredByDanny(false);
+    await cancelRing(settings.ntfyTopic);
+  };
+
   // Danny acknowledges the ring
-  const handleAcknowledge = async () => {
+  const handleDannyAcknowledge = async () => {
     unlockAudio();
     triggerHaptic();
     if (audioIntervalRef.current) {
@@ -151,7 +184,6 @@ export function App() {
 
     const ringId = activeRing?.id || 'ring_ack';
     setActiveRing(null);
-    setLastAckTime(Date.now());
     await acknowledgeRing(ringId, settings.appsScriptUrl, settings.ntfyTopic);
   };
 
@@ -161,8 +193,6 @@ export function App() {
     setSettings(updated);
     saveSettings(updated);
   };
-
-  const wasRecentlyAnswered = lastAckTime && (Date.now() - lastAckTime < 25000);
 
   return (
     <div className="min-h-screen bg-[#090D16] text-slate-100 flex flex-col justify-between font-sans selection:bg-amber-500/30">
@@ -230,14 +260,14 @@ export function App() {
                 </p>
 
                 <button
-                  onClick={handleAcknowledge}
+                  onClick={handleBriCancel}
                   className="px-6 py-2.5 rounded-xl bg-slate-700/90 hover:bg-slate-600 text-xs font-semibold text-slate-300 transition-all active:scale-95"
                 >
                   Dismiss / Cancel
                 </button>
               </div>
-            ) : wasRecentlyAnswered ? (
-              /* Danny just tapped On My Way! */
+            ) : answeredByDanny ? (
+              /* Danny tapped On My Way! */
               <div className="w-full bg-emerald-950/40 border-2 border-emerald-500/70 rounded-3xl p-7 shadow-2xl text-center mb-6 animate-fadeIn">
                 <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-emerald-500/20 flex items-center justify-center text-3xl">
                   🏃
@@ -245,14 +275,18 @@ export function App() {
                 <h2 className="text-2xl font-black text-emerald-400 mb-1">
                   Danny is On His Way!
                 </h2>
-                <p className="text-xs text-emerald-300/80">
+                <p className="text-xs text-emerald-300/80 mb-4">
                   Bell acknowledged and answered!
                 </p>
+                <button
+                  onClick={() => setAnsweredByDanny(false)}
+                  className="px-5 py-2 rounded-xl bg-emerald-800/60 hover:bg-emerald-700 text-xs font-semibold text-emerald-200 transition-all"
+                >
+                  OK
+                </button>
               </div>
-            ) : null}
-
-            {/* Big Ring Bell Button (Only shown when not pending) */}
-            {(!activeRing || activeRing.status !== 'PENDING') && (
+            ) : (
+              /* Big Ring Bell Button */
               <>
                 <div className="relative group cursor-pointer mb-6" onClick={handleRingBell}>
                   {/* Outer Glow Pulse */}
@@ -316,7 +350,7 @@ export function App() {
                 </p>
 
                 <button
-                  onClick={handleAcknowledge}
+                  onClick={handleDannyAcknowledge}
                   className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-extrabold text-xl shadow-lg shadow-emerald-500/30 active:scale-95 transition-all flex items-center justify-center space-x-2"
                 >
                   <span>🏃</span>
@@ -334,9 +368,18 @@ export function App() {
                   Ready to receive calls from Bri. Your phone will chime and alert when she rings.
                 </p>
 
-                <div className="inline-flex items-center space-x-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                  <span>Push Channel: {HARDCODED_NTFY_TOPIC}</span>
+                <button
+                  onClick={loadNtfyData}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-slate-300 transition-all active:scale-95 mb-4"
+                >
+                  🔄 Check Status
+                </button>
+
+                <div className="block">
+                  <span className="inline-flex items-center space-x-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span>Push Channel: {HARDCODED_NTFY_TOPIC}</span>
+                  </span>
                 </div>
               </div>
             )}
