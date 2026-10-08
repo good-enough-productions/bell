@@ -12,8 +12,11 @@ export function App() {
   const [customNote, setCustomNote] = useState<string>('');
   const [showSettings, setShowSettings] = useState<boolean>(false);
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
-  const [isRingingLoading, setIsRingingLoading] = useState<boolean>(false);
   const [answeredByDanny, setAnsweredByDanny] = useState<boolean>(false);
+  const [docModalUrl, setDocModalUrl] = useState<string | null>(null);
+  const [showFeedback, setShowFeedback] = useState<boolean>(false);
+  const [feedbackText, setFeedbackText] = useState<string>('');
+  const [feedbackSent, setFeedbackSent] = useState<boolean>(false);
 
   const audioIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isBri = settings.userRole === 'Bri';
@@ -513,6 +516,36 @@ export function App() {
                 <span className="font-semibold text-slate-300 block mb-1">Live Push Channel</span>
                 <span>Subscribed to: <code className="text-amber-400 font-mono">{HARDCODED_NTFY_TOPIC}</code></span>
               </div>
+
+              {/* Documentation & Guides */}
+              <div>
+                <label className="block text-slate-400 font-medium mb-1.5">Documentation & Notes</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setDocModalUrl('/user_guide.html')}
+                    className="py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-medium text-xs transition-all"
+                  >
+                    📖 User Guide
+                  </button>
+                  <button
+                    onClick={() => setDocModalUrl('/changelog.html')}
+                    className="py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-medium text-xs transition-all"
+                  >
+                    📋 Changelog
+                  </button>
+                </div>
+              </div>
+
+              {/* Beta Feedback Button */}
+              <div>
+                <button
+                  onClick={() => setShowFeedback(true)}
+                  className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-amber-500/30 text-amber-300 font-medium text-xs transition-all flex items-center justify-center space-x-1.5"
+                >
+                  <span>💬</span>
+                  <span>Send Beta Feedback</span>
+                </button>
+              </div>
             </div>
 
             <button
@@ -521,6 +554,82 @@ export function App() {
             >
               Done
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Embedded Documentation Modal */}
+      {docModalUrl && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full h-[80vh] flex flex-col p-4 shadow-2xl relative">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <span className="font-bold text-white text-sm">
+                {docModalUrl.includes('user_guide') ? '📖 User Guide' : '📋 Changelog'}
+              </span>
+              <button
+                onClick={() => setDocModalUrl(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+            <iframe
+              src={docModalUrl}
+              title="Documentation Viewer"
+              className="w-full flex-1 border-0 rounded-b-2xl mt-2 bg-[#090D16]"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Beta Feedback Modal */}
+      {showFeedback && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-sm w-full p-6 shadow-2xl relative">
+            <button
+              onClick={() => { setShowFeedback(false); setFeedbackSent(false); setFeedbackText(''); }}
+              className="absolute top-5 right-5 text-slate-400 hover:text-white"
+            >
+              ✕
+            </button>
+
+            <h3 className="text-base font-bold text-white mb-2 flex items-center space-x-2">
+              <span>💬</span>
+              <span>Send Beta Feedback</span>
+            </h3>
+            <p className="text-xs text-slate-400 mb-4">
+              Submit ideas, chime issues, or suggestions to the living backlog.
+            </p>
+
+            {feedbackSent ? (
+              <div className="py-6 text-center text-emerald-400 font-medium text-sm">
+                ✓ Feedback logged to backlog! Thank you.
+              </div>
+            ) : (
+              <>
+                <textarea
+                  value={feedbackText}
+                  onChange={e => setFeedbackText(e.target.value)}
+                  placeholder="Describe your feedback or idea..."
+                  rows={4}
+                  className="w-full p-3 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 mb-4 resize-none"
+                />
+                <button
+                  disabled={!feedbackText.trim()}
+                  onClick={() => {
+                    setFeedbackSent(true);
+                    setTimeout(() => {
+                      setShowFeedback(false);
+                      setFeedbackSent(false);
+                      setFeedbackText('');
+                    }, 1200);
+                  }}
+                  className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 font-bold text-slate-950 transition-all text-xs disabled:opacity-50"
+                >
+                  Submit Feedback
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}

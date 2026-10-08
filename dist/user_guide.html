@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Household Bell — User Guide</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      margin: 0;
+      padding: 16px;
+      background-color: #090D16;
+      color: #E2E8F0;
+      line-height: 1.6;
+    }
+    h1 { color: #F59E0B; font-size: 1.5rem; border-bottom: 2px solid #F59E0B; padding-bottom: 8px; }
+    h2 { color: #FBBF24; font-size: 1.2rem; margin-top: 20px; }
+    p, li { font-size: 0.95rem; color: #CBD5E1; }
+    .card {
+      background: #1E293B;
+      border-radius: 12px;
+      padding: 14px;
+      margin-bottom: 14px;
+      border-left: 4px solid #F59E0B;
+    }
+    code {
+      background: #334155;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: monospace;
+      color: #FDE68A;
+    }
+  </style>
+</head>
+<body>
+  <h1>🔔 Household Bell — User Guide</h1>
+
+  <div class="card">
+    <h3>💡 What is Household Bell?</h3>
+    <p>Household Bell is a zero-latency, serverless household intercom connecting Bri (Caller) and Danny (Receiver). It delivers instant audio chimes and haptic vibrations across rooms using Server-Sent Events (SSE) and Google Apps Script logging.</p>
+  </div>
+
+  <h2>🚀 How It Works</h2>
+  <ul>
+    <li><strong>👩 Bri (The Caller):</strong> Taps the giant gold "Ring Bell" button to chime Danny's phone. Can add an optional quick note (e.g. "Bring water" or "Need help with toddler").</li>
+    <li><strong>👨 Danny (The Receiver):</strong> Receives an instant audible chime, screen flash, and persistent alert showing Bri's message and elapsed time. Taps <strong>"ON MY WAY!"</strong> to acknowledge.</li>
+    <li><strong>Two-Way Confirmation:</strong> Once Danny acknowledges, Bri's screen updates immediately with "Danny is On His Way!" and a running person banner.</li>
+    <li><strong>Serverless Cloud Logging:</strong> Every chime and acknowledgement is logged to your personal Google Sheet ledger for historical review.</li>
+  </ul>
+
+  <h2>⚙️ Quick Tips</h2>
+  <ul>
+    <li><strong>Role Switching:</strong> Tap the identity button in the top bar to switch between Bri and Danny.</li>
+    <li><strong>Sound & Audio Lock:</strong> On mobile browsers, make sure to tap once on the screen on load to allow browser audio playback.</li>
+  </ul>
+</body>
+</html>
